@@ -79,7 +79,7 @@ function server(over: {
       if (over.list === 'fail') return fail(500, 'upstream down');
       return ok({ success: true, data: over.list ?? [MEETING] });
     }
-    if (u.includes('/deals')) return ok({ success: true, data: [{ id: 'D009', name: 'Acme renewal' }] });
+    if (u.includes('/deals')) return ok({ success: true, data: [{ id: 'D009', name: 'Acme renewal' }], total: 1 });
     if (u.includes('/companies') || u.includes('/accounts')) return ok({ success: true, data: [] });
     return ok({ success: true, data: [] });
   });
@@ -222,9 +222,10 @@ describe('the push action', () => {
     await waitFor(() => expect(screen.getByText('Pricing call')).toBeInTheDocument());
 
     await user.click(screen.getByRole('button', { name: /Change linked record/i }));
-    // The picker is a real select fed by the deals list, so this chooses an
-    // option rather than typing an id.
-    await user.selectOptions(await screen.findByLabelText(/^Deal$/i), 'D009');
+    // Server search (slice 6): clear the current link, search, pick.
+    await user.click(await screen.findByRole('button', { name: /^Clear /i }));
+    await user.type(screen.getByRole('combobox', { name: 'Search for the record' }), 'Acme');
+    await user.click(await screen.findByRole('option', { name: /Acme renewal/ }));
     await user.click(screen.getByRole('button', { name: /^Link$/i }));
 
     await waitFor(() => {
@@ -246,7 +247,10 @@ describe('the push action', () => {
     await waitFor(() => expect(screen.getByText('Pricing call')).toBeInTheDocument());
 
     await user.click(screen.getByRole('button', { name: /Change linked record/i }));
-    await user.selectOptions(await screen.findByLabelText(/^Deal$/i), 'D009');
+    // Server search (slice 6): clear the current link, search, pick.
+    await user.click(await screen.findByRole('button', { name: /^Clear /i }));
+    await user.type(screen.getByRole('combobox', { name: 'Search for the record' }), 'Acme');
+    await user.click(await screen.findByRole('option', { name: /Acme renewal/ }));
     await user.click(screen.getByRole('button', { name: /^Link$/i }));
 
     await waitFor(() => expect(

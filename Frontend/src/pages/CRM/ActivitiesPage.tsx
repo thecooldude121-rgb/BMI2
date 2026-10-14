@@ -9,11 +9,13 @@ import { Badge, type BadgeTone } from '../../components/ui/Badge';
 import { Alert } from '../../components/ui/Alert';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Modal } from '../../components/ui/Modal';
-import { selectClass, inputClass, filterSelectClass } from '../../components/ui/Field';
+import { inputClass, filterSelectClass } from '../../components/ui/Field';
 import PageHeader from '../../components/Layout/PageHeader';
 import LeadsPager from '../../components/Leads/LeadsPager';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import LogActivityModal from '../../components/CRM/LogActivityModal';
+import RecordPicker from '../../components/common/RecordPicker';
+import { RECORD_KIND_LABEL, type RecordOption } from '../../utils/recordSearch';
 import {
   fetchActivitiesPage,
   fetchActivitySummary,
@@ -25,9 +27,6 @@ import {
   type ActivityParent,
 } from '../../utils/activitiesApi';
 import { fetchUsers, type WorkspaceUser } from '../../utils/usersApi';
-import { fetchContacts } from '../../utils/contactsApi';
-import { fetchAccounts } from '../../utils/accountsApi';
-import { fetchDeals } from '../../utils/dealsApi';
 import { groupActivities, groupingCoverage, type ActivityGroup, type ActivityGroupMode } from '../../utils/activityGrouping';
 import { localDay } from '../../utils/dates';
 
@@ -96,8 +95,8 @@ function displayStatus(r: ActivityRecord): { label: string; tone: BadgeTone } {
 const ICON: Record<string, React.ElementType> = { meeting: Video, call: Phone, email: Mail, task: CheckCircle, note: FileText };
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
-type RecordKind = 'contact' | 'company' | 'deal';
-const KIND_LABEL: Record<RecordKind, string> = { contact: 'Contact', company: 'Account', deal: 'Deal' };
+/** An activity hangs off exactly one of these (leads log from their own page). */
+const LOG_KINDS: ('contact' | 'company' | 'deal')[] = ['contact', 'company', 'deal'];
 
 const ActivitiesPage: React.FC = () => {
   const navigate = useNavigate();
@@ -128,10 +127,8 @@ const ActivitiesPage: React.FC = () => {
 
   // Log activity: choose the record first (an activity hangs off exactly one).
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickKind, setPickKind] = useState<RecordKind>('contact');
-  const [pickId, setPickId] = useState('');
-  const [options, setOptions] = useState<Record<RecordKind, { id: string; label: string }[]> | null>(null);
-  const [optionsError, setOptionsError] = useState<string | null>(null);
+  // Picked by SERVER search (slice 6) — it loaded the first 200 of each kind.
+  const [picked, setPicked] = useState<RecordOption | null>(null);
   const [logParent, setLogParent] = useState<{ parent: ActivityParent; label: string } | null>(null);
 
   useEffect(() => {
@@ -172,20 +169,6 @@ const ActivitiesPage: React.FC = () => {
       .catch(e => { if (!cancelled) setSummaryError(e?.message ?? 'Could not load the activity counts'); });
     return () => { cancelled = true; };
   }, [filters, page, reloadKey]);
-
-  useEffect(() => {
-    if (!pickerOpen || options) return;
-    Promise.all([fetchContacts({ limit: 200 }), fetchAccounts(200), fetchDeals(200)])
-      .then(([contacts, accounts, deals]) => {
-        setOptions({
-          contact: contacts.map(c => ({ id: c.id, label: c.name || c.email || c.id })),
-          company: accounts.map(a => ({ id: a.id, label: a.name || a.id })),
-          deal: deals.map((d: any) => ({ id: d.id, label: d.name || d.title || d.id })),
-        });
-        setOptionsError(null);
-      })
-      .catch(e => setOptionsError(e?.message ?? 'Could not load records'));
-  }, [pickerOpen, options]);
 
   const activeFilters = !!(filterType || filterDate || filterOwner || filterLinked || filterStatus || search);
   const clearAllFilters = () => {
@@ -318,7 +301,7 @@ const ActivitiesPage: React.FC = () => {
         title="Activities"
         description="Track all customer interactions across your CRM"
         actions={
-          <Button onClick={() => { setPickId(''); setPickerOpen(true); }}><Plus className="h-4 w-4" aria-hidden="true" /> Log activity</Button>
+          <Button onClick={() => { setPicked(null); setPickerOpen(true); }}><Plus className="h-4 w-4" aria-hidden="true" /> Log activity</Button>
         }
       />
 
@@ -407,7 +390,7 @@ const ActivitiesPage: React.FC = () => {
               action={<Button variant="secondary" onClick={clearAllFilters}>Clear filters</Button>} />
           : <EmptyState title="No activity logged yet"
               reason="Calls, emails, meetings and notes logged against a lead, deal, contact or account appear here."
-              action={<Button onClick={() => { setPickId(''); setPickerOpen(true); }}>Log activity</Button>} />
+              action={<Button onClick={() => { setPicked(null); setPickerOpen(true); }}>Log activity</Button>} />
       )}
 
       {!loadError && total > 0 && (
@@ -458,12 +441,12 @@ const ActivitiesPage: React.FC = () => {
           <>
             <Button variant="secondary" onClick={() => setPickerOpen(false)}>Cancel</Button>
             <Button
-              disabled={!pickId}
+              disabled={!picked}
               onClick={() => {
-                const label = options?.[pickKind].find(o => o.id === pickId)?.label ?? pickId;
-                const parent: ActivityParent = pickKind === 'contact' ? { contact_id: pickId } : pickKind === 'company' ? { company_id: pickId } : { deal_id: pickId };
+                if (!picked) return;
+                const parent: ActivityParent = picked.kind === 'contact' ? { contact_id: picked.id } : picked.kind === 'company' ? { company_id: picked.id } : { deal_id: picked.id };
                 setPickerOpen(false);
-                setLogParent({ parent, label: `${KIND_LABEL[pickKind]}: ${label}` });
+                setLogParent({ parent, label: `${RECORD_KIND_LABEL[picked.kind]}: ${picked.label}` });
               }}
             >
               Continue
@@ -473,20 +456,7 @@ const ActivitiesPage: React.FC = () => {
       >
         <p className="text-sm text-ink-muted">An activity belongs to one record. Choose it first.</p>
         <div className="mt-3 space-y-3">
-          <div>
-            <label htmlFor="log-record-kind" className="block text-sm font-medium text-ink">Record type</label>
-            <select id="log-record-kind" className={`${selectClass()} mt-1`} value={pickKind} onChange={e => { setPickKind(e.target.value as RecordKind); setPickId(''); }}>
-              {(Object.keys(KIND_LABEL) as RecordKind[]).map(k => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="log-record-id" className="block text-sm font-medium text-ink">{KIND_LABEL[pickKind]}</label>
-            <select id="log-record-id" className={`${selectClass()} mt-1`} value={pickId} onChange={e => setPickId(e.target.value)} disabled={!options}>
-              <option value="">{options ? `Choose a ${KIND_LABEL[pickKind].toLowerCase()}…` : 'Loading…'}</option>
-              {options?.[pickKind].map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
-            </select>
-          </div>
-          {optionsError && <p className="text-sm text-danger-700" role="alert">{optionsError}</p>}
+          <RecordPicker kinds={LOG_KINDS} value={picked} onChange={setPicked} label="Search for the record" />
           <p className="text-xs text-ink-muted">Leads have their own log-activity composer on the lead's page.</p>
         </div>
       </Modal>

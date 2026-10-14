@@ -2,11 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { X, Link2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import {
-  pushToRecord, RELATED_TYPES, RELATED_TYPE_LABEL,
+  pushToRecord, RELATED_TYPES,
   type MeetingDetail, type RelatedType,
 } from '../../utils/meetingsApi';
-import { fetchDeals } from '../../utils/dealsApi';
-import { fetchAccounts } from '../../utils/accountsApi';
+import RecordPicker from '../common/RecordPicker';
+import { RECORD_KIND_LABEL, type RecordOption } from '../../utils/recordSearch';
 
 /**
  * THE "PUSH TO DEAL OR ACCOUNT" ACTION.
@@ -16,13 +16,9 @@ import { fetchAccounts } from '../../utils/accountsApi';
  * place the workspace-ownership check on the target can be forgotten, and it
  * is not forgotten there.
  *
- * DEALS AND ACCOUNTS ARE PICKED FROM REAL LISTS, fetched here. Contacts and
- * leads are accepted by the API and are offered as a typed id rather than a
- * picker: this modal is the deal/account action Venkat described, and adding
- * two more list fetches to it for the rarer cases would slow the common one.
- * A typed id is validated by the server exactly like a picked one — it returns
- * "related_to_id does not name a contact in this workspace" — so nothing is
- * less safe, only less convenient.
+ * EVERY TYPE IS PICKED BY SERVER SEARCH (slice 6). It loaded the first 200
+ * deals and accounts — so deal #201 could not be chosen — and took contacts and
+ * leads as a typed id. The server still validates the id like any other.
  *
  * The server's rejection message is shown VERBATIM. It names the field and
  * never discloses whether the row exists in another workspace.
@@ -33,41 +29,24 @@ const PushToRecordModal: React.FC<{
   onClose: () => void;
   onPushed: () => void;
 }> = ({ isOpen, meeting, onClose, onPushed }) => {
-  const [type, setType] = useState<RelatedType>(meeting.related_to_type ?? 'deal');
-  const [recordId, setRecordId] = useState(meeting.related_to_id ?? '');
-  const [deals, setDeals] = useState<{ id: string; name: string }[]>([]);
-  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
-  const [listError, setListError] = useState<string | null>(null);
+  const initial = (): RecordOption | null => meeting.related_to_type && meeting.related_to_id
+    ? { kind: meeting.related_to_type, id: meeting.related_to_id, label: `${RECORD_KIND_LABEL[meeting.related_to_type]} ${meeting.related_to_id}` }
+    : null;
+  const [picked, setPicked] = useState<RecordOption | null>(initial);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    setError(null);
-    Promise.all([
-      fetchDeals(200).then(rows => rows.map((d: { id: string; name?: string; title?: string }) => ({
-        id: d.id, name: d.name || d.title || d.id,
-      }))).catch(() => { throw new Error('deals'); }),
-      fetchAccounts(200).then(rows => rows.map(a => ({ id: a.id, name: a.name })))
-        .catch(() => { throw new Error('accounts'); }),
-    ])
-      .then(([d, a]) => { setDeals(d); setAccounts(a); setListError(null); })
-      // A failed list is stated, not silently empty: an empty dropdown reads as
-      // "you have no deals", which is a claim this modal cannot make.
-      .catch(() => setListError('Could not load the deal and account lists. You can still enter an id.'));
-  }, [isOpen]);
+  useEffect(() => { if (isOpen) { setError(null); setPicked(initial()); } }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isOpen) return null;
 
-  const options = type === 'deal' ? deals : type === 'company' ? accounts : null;
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!recordId.trim()) { setError('Choose a record, or enter its id.'); return; }
+    if (!picked) { setError('Choose a record.'); return; }
     setSaving(true);
     setError(null);
     try {
-      await pushToRecord(meeting.id, type, recordId.trim());
+      await pushToRecord(meeting.id, picked.kind as RelatedType, picked.id);
       onPushed();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not link this meeting.');
@@ -89,7 +68,6 @@ const PushToRecordModal: React.FC<{
     }
   };
 
-  const field = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-indigo-500';
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -105,37 +83,12 @@ const PushToRecordModal: React.FC<{
         </div>
 
         <form onSubmit={submit} className="px-6 py-5 space-y-4">
-          <div>
-            <label htmlFor="push-type" className="block text-[12px] font-medium text-gray-700 mb-1">
-              Record type
-            </label>
-            <select
-              id="push-type" className={field} value={type}
-              onChange={e => { setType(e.target.value as RelatedType); setRecordId(''); setError(null); }}
-            >
-              {RELATED_TYPES.map(t => (
-                <option key={t} value={t}>{RELATED_TYPE_LABEL[t]}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="push-record" className="block text-[12px] font-medium text-gray-700 mb-1">
-              {RELATED_TYPE_LABEL[type]}
-            </label>
-            {options ? (
-              <select id="push-record" className={field} value={recordId}
-                onChange={e => { setRecordId(e.target.value); setError(null); }}>
-                <option value="">Choose a {RELATED_TYPE_LABEL[type].toLowerCase()}…</option>
-                {options.map(o => <option key={o.id} value={o.id}>{o.name} ({o.id})</option>)}
-              </select>
-            ) : (
-              <input id="push-record" className={field} value={recordId}
-                onChange={e => { setRecordId(e.target.value); setError(null); }}
-                placeholder={`${RELATED_TYPE_LABEL[type]} id`} />
-            )}
-            {listError && <p className="text-[11px] text-amber-700 mt-1">{listError}</p>}
-          </div>
+          <RecordPicker
+            kinds={[...RELATED_TYPES]}
+            value={picked}
+            onChange={v => { setPicked(v); setError(null); }}
+            label="Search for the record"
+          />
 
           <p className="text-[11px] leading-relaxed text-gray-500">
             Activities you log from this note will attach to the record you choose, and appear

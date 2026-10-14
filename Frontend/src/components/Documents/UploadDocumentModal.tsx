@@ -144,10 +144,14 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
   /** The signed-in user — for the uploader name, which was hardcoded. */
   const { user } = useAuth();
 
-  /** The four real record lists, fetched only while the modal is open. */
+  /**
+   * Server search across deals, accounts, contacts and activities (slice 6),
+   * driven by the box's text — only while the modal is open and nothing is
+   * picked yet (a picked record's name is not a new search).
+   */
   const {
-    options: relatedOptions, loading: relatedLoading, failed: relatedFailed,
-  } = useRelatedRecordOptions(isOpen);
+    options: relatedOptions, loading: relatedLoading, failed: relatedFailed, hidden: relatedHidden,
+  } = useRelatedRecordOptions(isOpen && !relatedRecord, relatedSearch);
 
   /** The same single member source the other two document pickers read. */
   const { members: workspaceMembers, loading: membersLoading, error: membersError } =
@@ -285,16 +289,8 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
    * hundred options while a modal is open is not worth memoising, and a plain
    * const cannot be mis-ordered by the next person editing this file.
    */
-  const q = relatedSearch.trim().toLowerCase();
-  const matchingRecords = (q
-    ? relatedOptions.filter(o =>
-        o.name.toLowerCase().includes(q)
-        || (o.detail ?? '').toLowerCase().includes(q)
-        || MODULE_LABEL[o.module].toLowerCase().includes(q))
-    : relatedOptions
-  // Capped so a large workspace cannot render thousands of rows into a
-  // dropdown; the search narrows it rather than paging.
-  ).slice(0, 50);
+  // The server already searched; nothing is filtered again in the browser.
+  const matchingRecords = relatedOptions;
 
   /**
    * Turns a server validation message into something the user can act on.
@@ -1033,6 +1029,11 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
                           {relatedSearch.trim()
                             ? 'No record matches that search.'
                             : 'No deals, accounts, contacts or activities yet.'}
+                        </p>
+                      )}
+                      {!relatedLoading && relatedHidden > 0 && (
+                        <p className="px-3 py-1.5 text-xs" style={{ color: '#6b7280' }} role="status">
+                          {relatedHidden.toLocaleString()} more {relatedHidden === 1 ? 'match' : 'matches'} not shown — keep typing to narrow.
                         </p>
                       )}
                       {matchingRecords.map((opt) => (

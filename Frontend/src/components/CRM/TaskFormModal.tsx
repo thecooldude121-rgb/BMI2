@@ -7,6 +7,8 @@ import {
   type TaskRecord,
 } from '../../utils/activitiesApi';
 import { fetchUsers, type WorkspaceUser } from '../../utils/usersApi';
+import RecordPicker from '../common/RecordPicker';
+import { RECORD_KIND_LABEL, type RecordOption } from '../../utils/recordSearch';
 
 /**
  * Create or edit a task.
@@ -33,21 +35,9 @@ import { fetchUsers, type WorkspaceUser } from '../../utils/usersApi';
  * that table. Offering it in the UI would invite exactly the reference that
  * makes it a cross-workspace read.
  */
-const RELATED_OPTIONS = [
-  { value: '', label: 'Not related to a record' },
-  { value: 'contact', label: 'Contact' },
-  { value: 'company', label: 'Account' },
-  { value: 'deal', label: 'Deal' },
-  { value: 'lead', label: 'Lead' },
-] as const;
+const RELATED_KINDS: RelatedType[] = ['contact', 'company', 'deal', 'lead'];
 
 type RelatedType = 'contact' | 'company' | 'deal' | 'lead';
-
-/** One selectable record for the related-to picker. */
-export interface RelatedOption {
-  id: string;
-  label: string;
-}
 
 interface TaskFormModalProps {
   isOpen: boolean;
@@ -56,8 +46,6 @@ interface TaskFormModalProps {
   task?: TaskRecord | null;
   /** Pre-fills the due date of a NEW task (the calendar's selected day). Ignored when editing. */
   defaultDueDate?: string;
-  /** Records the related-to picker can choose from, by type. */
-  relatedRecords: Record<RelatedType, RelatedOption[]>;
   onSaved: (task: TaskRecord, mode: 'created' | 'updated') => void;
 }
 
@@ -65,7 +53,7 @@ const inputClass =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600';
 
 const TaskFormModal: React.FC<TaskFormModalProps> = ({
-  isOpen, onClose, task, defaultDueDate, relatedRecords, onSaved,
+  isOpen, onClose, task, defaultDueDate, onSaved,
 }) => {
   const editing = Boolean(task);
 
@@ -76,8 +64,15 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
   const [status, setStatus] = useState<string>('pending');
   const [dueDate, setDueDate] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
-  const [relatedType, setRelatedType] = useState<string>('');
-  const [relatedId, setRelatedId] = useState('');
+  /**
+   * The related record, picked by SERVER search (slice 6). The form used to be
+   * handed the first 200 contacts / accounts / deals and NO leads, so record
+   * #201 could never be linked and choosing "Lead" offered an empty list.
+   * null = not related to a record.
+   */
+  const [related, setRelated] = useState<RecordOption | null>(null);
+  /** A stored relation the picker cannot represent ('employee') is kept as-is. */
+  const [preserved, setPreserved] = useState<{ type: string; id: string } | null>(null);
 
   const [users, setUsers] = useState<WorkspaceUser[]>([]);
   const [usersError, setUsersError] = useState<string | null>(null);
@@ -97,8 +92,15 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
     // <input type="date"> wants exactly YYYY-MM-DD.
     setDueDate(task?.due_date ? String(task.due_date).slice(0, 10) : (defaultDueDate ?? ''));
     setAssignedTo(task?.assigned_to ?? '');
-    setRelatedType(task?.related_to_type ?? '');
-    setRelatedId(task?.related_to_id ?? '');
+    const rt = task?.related_to_type, rid = task?.related_to_id;
+    if (rt && rid && (RELATED_KINDS as string[]).includes(rt)) {
+      // The tasks API serves only the id, not the record's name (a tracked gap).
+      setRelated({ kind: rt as RelatedType, id: rid, label: `${RECORD_KIND_LABEL[rt as RelatedType]} ${rid}` });
+      setPreserved(null);
+    } else {
+      setRelated(null);
+      setPreserved(rt && rid ? { type: rt, id: rid } : null);
+    }
     setError(null);
   }, [isOpen, task, defaultDueDate]);
 
@@ -111,10 +113,6 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
     return () => { cancelled = true; };
   }, [isOpen]);
 
-  const optionsForType = useMemo(
-    () => (relatedType ? relatedRecords[relatedType as RelatedType] ?? [] : []),
-    [relatedType, relatedRecords],
-  );
 
   /**
    * The task's existing assignee may not be one of the workspace users — the 15
@@ -127,20 +125,13 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
     return assignedTo && !names.includes(assignedTo) ? [assignedTo, ...names] : names;
   }, [users, assignedTo]);
 
-  const handleRelatedTypeChange = (next: string) => {
-    setRelatedType(next);
-    // The id belongs to the old type; keeping it would post a mismatched pair.
-    setRelatedId('');
-  };
+  const relatedType = related?.kind ?? (preserved?.type as RelatedType | undefined) ?? '';
+  const relatedId = related?.id ?? preserved?.id ?? '';
 
   const submit = async () => {
     if (!title.trim()) { setError('A title is required.'); return; }
     // The server rejects a half-supplied pair with a 400; catching it here says
     // so next to the field instead.
-    if (relatedType && !relatedId) {
-      setError('Choose which record this task relates to, or set it to “Not related to a record”.');
-      return;
-    }
 
     setSaving(true);
     setError(null);
@@ -252,27 +243,17 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
           {usersError && <p className="mt-1 text-xs text-danger-700">{usersError}</p>}
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="task-related-type" className="mb-1 block text-sm font-medium text-gray-700">Related to</label>
-            <select id="task-related-type" className={inputClass} value={relatedType}
-              onChange={e => handleRelatedTypeChange(e.target.value)}>
-              {RELATED_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-          <div hidden={!relatedType}>
-            <label htmlFor="task-related-id" className="mb-1 block text-sm font-medium text-gray-700">Record</label>
-            <select id="task-related-id" className={inputClass} value={relatedId}
-              onChange={e => setRelatedId(e.target.value)}>
-              <option value="">Choose…</option>
-              {/* An id stored on the task whose record is not in the loaded list
-                  is still shown, so editing cannot silently drop the link. */}
-              {relatedId && !optionsForType.some(o => o.id === relatedId) && (
-                <option value={relatedId}>{relatedId} (not in the loaded list)</option>
-              )}
-              {optionsForType.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
-            </select>
-          </div>
+        <div>
+          <p className="mb-1 block text-sm font-medium text-gray-700">Related to <span className="font-normal text-gray-500">(optional)</span></p>
+          <RecordPicker
+            kinds={RELATED_KINDS}
+            value={related}
+            onChange={v => { setRelated(v as RecordOption | null); setPreserved(null); }}
+            label="Search for the related record"
+          />
+          {preserved && (
+            <p className="mt-1 text-xs text-gray-500">Linked to {preserved.type} {preserved.id}, which this form cannot change. Pick a record to replace it.</p>
+          )}
         </div>
       </div>
     </Modal>

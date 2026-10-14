@@ -13,7 +13,7 @@ import { MemoryRouter } from 'react-router-dom';
  */
 const api = vi.hoisted(() => ({
   fetchActivitiesPage: vi.fn(), fetchActivitySummary: vi.fn(), updateActivity: vi.fn(),
-  fetchUsers: vi.fn(), fetchContacts: vi.fn(), fetchAccounts: vi.fn(), fetchDeals: vi.fn(), createActivity: vi.fn(),
+  fetchUsers: vi.fn(), fetchContactsPage: vi.fn(), fetchAccountsPage: vi.fn(), fetchDealsPage: vi.fn(), createActivity: vi.fn(),
 }));
 vi.mock('../../utils/activitiesApi', async () => ({
   ...(await vi.importActual<object>('../../utils/activitiesApi')),
@@ -21,9 +21,9 @@ vi.mock('../../utils/activitiesApi', async () => ({
   updateActivity: api.updateActivity, createActivity: api.createActivity,
 }));
 vi.mock('../../utils/usersApi', async () => ({ ...(await vi.importActual<object>('../../utils/usersApi')), fetchUsers: api.fetchUsers }));
-vi.mock('../../utils/contactsApi', () => ({ fetchContacts: api.fetchContacts }));
-vi.mock('../../utils/accountsApi', () => ({ fetchAccounts: api.fetchAccounts }));
-vi.mock('../../utils/dealsApi', () => ({ fetchDeals: api.fetchDeals }));
+vi.mock('../../utils/contactsApi', async () => ({ ...(await vi.importActual<object>('../../utils/contactsApi')), fetchContactsPage: api.fetchContactsPage }));
+vi.mock('../../utils/accountsApi', async () => ({ ...(await vi.importActual<object>('../../utils/accountsApi')), fetchAccountsPage: api.fetchAccountsPage }));
+vi.mock('../../utils/dealsApi', async () => ({ ...(await vi.importActual<object>('../../utils/dealsApi')), fetchDealsPage: api.fetchDealsPage }));
 
 import ActivitiesPage from './ActivitiesPage';
 
@@ -45,9 +45,9 @@ beforeEach(() => {
   }));
   api.fetchActivitySummary.mockResolvedValue(SUMMARY);
   api.fetchUsers.mockResolvedValue([{ id: 7, first_name: 'Dee', last_name: 'Admin', displayName: 'Dee Admin' }]);
-  api.fetchContacts.mockResolvedValue([{ id: 'CT1', name: 'Ana Ray', email: 'ana@x.example' }]);
-  api.fetchAccounts.mockResolvedValue([{ id: 'C1', name: 'Kora' }]);
-  api.fetchDeals.mockResolvedValue([{ id: 'D1', name: 'Kora renewal' }]);
+  api.fetchContactsPage.mockResolvedValue({ contacts: [{ id: 'CT1', name: 'Ana Ray', email: 'ana@x.example' }], total: 4312 });
+  api.fetchAccountsPage.mockResolvedValue({ accounts: [{ id: 'C1', name: 'Kora' }], total: 1 });
+  api.fetchDealsPage.mockResolvedValue({ deals: [{ id: 'D1', name: 'Kora renewal' }], total: 1, limit: 10, offset: 0 });
 });
 const renderPage = () => render(<MemoryRouter><ActivitiesPage /></MemoryRouter>);
 const ready = () => screen.findByText(/^Showing 1–25 of 60 activities/);
@@ -141,8 +141,11 @@ describe('Activities — server page, server counts, real filters', () => {
     await ready();
     await userEvent.click(screen.getByRole('button', { name: /Log activity/ }));
     const dialog = await screen.findByRole('dialog', { name: 'Log activity' });
-    await waitFor(() => expect(within(dialog).getByRole('option', { name: 'Ana Ray' })).toBeInTheDocument());
-    await userEvent.selectOptions(within(dialog).getByLabelText('Contact'), 'CT1');
+    // Server search, not a preloaded 200: typing asks GET /contacts?search=.
+    await userEvent.type(within(dialog).getByRole('combobox', { name: 'Search for the record' }), 'Ana');
+    await waitFor(() => expect(api.fetchContactsPage).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'Ana', limit: 10 })));
+    expect(await within(dialog).findByText('Showing 1 of 4,312 — keep typing to narrow.')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('option', { name: /Ana Ray/ }));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Continue' }));
     expect(await screen.findByText(/Contact: Ana Ray/)).toBeInTheDocument();
   });

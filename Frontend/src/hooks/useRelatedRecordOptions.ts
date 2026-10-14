@@ -1,8 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchDeals } from '../utils/dealsApi';
-import { fetchAccounts } from '../utils/accountsApi';
-import { fetchContacts } from '../utils/contactsApi';
-import { fetchActivities } from '../utils/activitiesApi';
+import { searchRecords, type RecordKind } from '../utils/recordSearch';
 import type { DocumentModule } from '../services/documentsService';
 
 /**
@@ -26,8 +23,12 @@ import type { DocumentModule } from '../services/documentsService';
  * DocumentsLibrary, deleted in this branch. This hook is why they can never be
  * needed again: the picker now offers only records that exist.
  *
- * ONE FETCH PER TYPE, in parallel, on open. `allSettled`, so one failing
- * endpoint costs one section of the picker rather than the whole upload.
+ * SERVER SEARCH, NOT A PRELOAD (slice 6). It loaded the first 200 of each type
+ * and filtered them in the browser, so the 201st deal could not be attached.
+ * Now the box's text goes to each list endpoint (`?search=&limit=10`), the four
+ * types in parallel, debounced; `allSettled`, so one failing endpoint costs one
+ * type rather than the whole picker. `hidden` is how many matches the server
+ * has beyond those shown, so the picker can say "keep typing".
  */
 
 export interface RelatedRecordOption {
@@ -46,87 +47,49 @@ export interface RelatedRecordOptions {
   loading: boolean;
   /** Names the types that failed, so the UI can say which are missing. */
   failed: string[];
+  /** Matches the server holds beyond the ones returned, across all types. */
+  hidden: number;
 }
 
 /**
  * `lead` is absent DELIBERATELY. The server accepts it, but nothing in this
- * modal ever offered leads and adding a fifth list is a product decision, not
+ * modal ever offered leads and adding a fifth type is a product decision, not
  * a bug fix. Recorded here so its absence reads as a choice.
  */
-const LIMIT = 200;
+const TYPES: { module: DocumentModule; kind: RecordKind; label: string }[] = [
+  { module: 'deal', kind: 'deal', label: 'deals' },
+  { module: 'account', kind: 'company', label: 'accounts' },
+  { module: 'contact', kind: 'contact', label: 'contacts' },
+  { module: 'activity', kind: 'activity', label: 'activities' },
+];
+const PER_TYPE = 10;
 
-export function useRelatedRecordOptions(enabled: boolean): RelatedRecordOptions {
-  const [options, setOptions] = useState<RelatedRecordOption[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [failed, setFailed] = useState<string[]>([]);
+export function useRelatedRecordOptions(enabled: boolean, query = ''): RelatedRecordOptions {
+  const [state, setState] = useState<RelatedRecordOptions>({ options: [], loading: false, failed: [], hidden: 0 });
 
   useEffect(() => {
     if (!enabled) return;
     let active = true;
-
-    (async () => {
-      setLoading(true);
-      const [deals, accounts, contacts, activities] = await Promise.allSettled([
-        fetchDeals(LIMIT),
-        fetchAccounts(LIMIT),
-        fetchContacts({ limit: LIMIT }),
-        fetchActivities({ limit: LIMIT }),
-      ]);
+    setState(s => ({ ...s, loading: true }));
+    const t = setTimeout(async () => {
+      const settled = await Promise.allSettled(TYPES.map(t => searchRecords(t.kind, query, PER_TYPE)));
       if (!active) return;
+      const options: RelatedRecordOption[] = [];
+      const failed: string[] = [];
+      let hidden = 0;
+      settled.forEach((r, i) => {
+        const t = TYPES[i];
+        if (r.status !== 'fulfilled') { failed.push(t.label); return; }
+        // A record with no id would post an empty record_id — skipped, never emitted.
+        for (const o of r.value.options) if (o.id) options.push({ module: t.module, id: String(o.id), name: o.label, detail: o.detail });
+        hidden += Math.max(0, r.value.total - r.value.options.length);
+      });
+      setState({ options, loading: false, failed, hidden });
+    }, 250);
+    return () => { active = false; clearTimeout(t); };
+  }, [enabled, query]);
 
-      const out: RelatedRecordOption[] = [];
-      const bad: string[] = [];
-
-      /** Coerces to an array: a wrong-shaped payload must not throw here. */
-      const list = <T,>(r: PromiseSettledResult<T[]>, label: string): T[] => {
-        if (r.status !== 'fulfilled') { bad.push(label); return []; }
-        if (!Array.isArray(r.value)) { bad.push(label); return []; }
-        return r.value;
-      };
-
-      for (const d of list<any>(deals, 'deals')) {
-        if (!d?.id) continue;
-        out.push({
-          module: 'deal', id: String(d.id),
-          name: d.name || String(d.id),
-          detail: d.company_name || undefined,
-        });
-      }
-      for (const a of list<any>(accounts, 'accounts')) {
-        if (!a?.id) continue;
-        out.push({
-          module: 'account', id: String(a.id),
-          name: a.name || String(a.id),
-          detail: a.industry || undefined,
-        });
-      }
-      for (const c of list<any>(contacts, 'contacts')) {
-        if (!c?.id) continue;
-        out.push({
-          module: 'contact', id: String(c.id),
-          // Fall back to the email rather than a placeholder name.
-          name: c.name || c.email || String(c.id),
-          detail: c.company || undefined,
-        });
-      }
-      for (const act of list<any>(activities, 'activities')) {
-        if (!act?.id) continue;
-        out.push({
-          module: 'activity', id: String(act.id),
-          name: act.subject || String(act.id),
-          detail: act.type || undefined,
-        });
-      }
-
-      setOptions(out);
-      setFailed(bad);
-      setLoading(false);
-    })();
-
-    return () => { active = false; };
-  }, [enabled]);
-
-  return { options, loading, failed };
+  return state;
 }
 
 /** Human label for a module, for the picker's grouping and its chip. */
