@@ -140,7 +140,7 @@ export default function ImportWizard({ onClose }: Props) {
           // notes (the server never read quick_notes — imported notes were
           // dropped); no 'unassigned' owner name; no fabricated score of 50.
           notes:         m.notes?.trim() || undefined,
-          owner_id:      rules.defaultOwnerId || undefined,
+          assigned_to_user_id: rules.defaultOwnerId ? Number(rules.defaultOwnerId) : undefined,
           status:        rules.defaultStatus,
           tags:          allTags,
           email_opt_in:  true,

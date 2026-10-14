@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Zap, ToggleLeft, ToggleRight, Tag, X } from 'lucide-react';
-import { TEAM_MEMBERS } from '../../../utils/leadOwnerRouting';
+import { useLeadOwnerOptions } from '../../../hooks/useLeadOwnerOptions';
 import type { ImportRules, DuplicateAction } from './types';
 
 const STATUSES = [
@@ -25,6 +25,7 @@ type Props = {
 
 export default function Step4Rules({ rules, onRulesChange }: Props) {
   const [tagInput, setTagInput] = useState('');
+  const { options: owners, error: ownersError } = useLeadOwnerOptions();
 
   function set<K extends keyof ImportRules>(key: K, value: ImportRules[K]) {
     onRulesChange({ ...rules, [key]: value });
@@ -70,14 +71,21 @@ export default function Step4Rules({ rules, onRulesChange }: Props) {
         {/* Default Owner */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Assign To</label>
+          {/* The workspace's real users — it offered placeholder queues (SDR Team…). */}
           <select aria-label="Assign To"
             value={rules.defaultOwnerId}
-            onChange={e => set('defaultOwnerId', e.target.value)}
+            onChange={e => {
+              const id = e.target.value;
+              // ONE update: two set() calls would each spread the same stale rules.
+              onRulesChange({ ...rules, defaultOwnerId: id, defaultOwnerLabel: owners?.find(o => o.id === id)?.label });
+            }}
+            disabled={owners === null}
             className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="">Unassigned</option>
-            {TEAM_MEMBERS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+            <option value="">{owners === null ? 'Loading the team…' : 'Unassigned'}</option>
+            {(owners ?? []).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
           </select>
+          {ownersError && <p className="text-xs text-red-600 mt-1" role="alert">The team could not load ({ownersError}). Leads can still be imported unassigned.</p>}
         </div>
 
         {/* Source Override */}
