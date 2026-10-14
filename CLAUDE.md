@@ -1856,6 +1856,47 @@ old constraint, which fails the shared-name test.
     mutation-tested. E2E on `bmi_crm_iso_test` via the real login and sidebar, each write confirmed in
     Postgres.
 
+- **SAVED-REPORTS REPLAY — THE PLAN, decided by Venkat 2026-10-15. Recorded here so it survives
+  context compaction; follow it in order and gate + report EACH step separately.**
+  **Order of work:** slice 6 -> this replay -> the cosmetic commits 0-14 (layout and colour only,
+  one at a time) LAST. The P3 saved-reports work lives on `claude/leadgen-session` (12 commits: a
+  design doc, then P3 Phases 0-8; pushed to origin at 2ee0b32). It is brought in by REPLAYING it onto
+  current `main` in small slices — NOT a merge (101 commits behind; a trial merge conflicts in
+  `CRMModule.tsx`, `CustomReportBuilder` and the 5b `ReportsPage`).
+  - **Done first, 2026-10-15:**
+    - **`bmi_reports_ro` set to NOLOGIN on the local Postgres cluster** (roles are cluster-wide, so
+      `bmi_crm` and `bmi_crm_iso_test` both). It had a SCRAM password, but `pg_hba.conf` is `trust`
+      for every local and loopback connection, so it logged in with no password (proven, then
+      refused after). No session was using it and nothing on main references it. Step b turns
+      login back on. **`trust` lets ANY role log in locally without a password, the superuser
+      included — so a reports-role password means nothing on a `trust` server; production must use
+      `scram-sha-256` in `pg_hba.conf`.**
+    - **Interim Report Detail fix:** `/crm/reports/:reportSlug` rendered fixture figures under a
+      heading built from the URL. Its route is now an honest "Detailed report views are coming soon"
+      state that never echoes the slug, and every View control on the Reports page is disabled
+      "coming soon" (the cards are no longer clickable) until step e.
+  - **Before step a: explain why migration 057 has NO ledger row on live** while its tables exist in
+    `bmi_crm_iso_test`. 055 and 056 ARE applied to live (ledger rows dated 20 and 21 Sep: RLS on
+    seven tables, the `bmi_reports_ro` role) and main has neither file — main must take 055/056
+    BYTE-FOR-BYTE (checksums `8f8f97a7`, `a9f0306c`) or the migration runner refuses to boot.
+  - **a.** Migrations 055-057, unchanged.
+  - **b.** The reports connection, its role, and the query builder. **The role's password comes from
+    configuration (an env var), never passwordless and never hardcoded**; the server refuses to use
+    the reports connection without it.
+  - **c.** Saved reports and grants.
+  - **d.** Run endpoints.
+  - **e.** Report Detail BY ID (replaces the interim stub above; the Reports page's View controls
+    come back pointing at real ids).
+  - **f.** The builder. **Once it is real, label it "Available"** — even though the Figma card
+    still says "Not available yet" (behaviour beats the frame here).
+  - **g.** Canned reports — **ONE implementation of the canned-report numbers, reusing 5b's server
+    totals** (`GET /deals/report`, `GET /deals/summary`, `GET /leads/summary`); never a second query
+    that can disagree with the Reports page.
+  - **h.** Exports (adds the `pdfkit` dependency).
+  - **i.** Schedules. **No send path exists, so nothing may suggest an email will be sent** — no
+    "will be emailed", no recipient field that reads as delivery, no "next send" time presented as
+    a delivery promise.
+
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different
   decision entirely (a transactional email provider, sender domain, SPF/DKIM). The two
