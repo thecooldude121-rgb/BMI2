@@ -75,11 +75,12 @@ const UNBACKED_REPORTS: ReadonlyArray<{
   },
   {
     section: 'sales', title: 'Quota Attainment', icon: '🎯',
-    // Deliberately period-specific: "no quota entered" for WHICH period is the
-    // difference between a state the user can fix and a vague absence.
-    reason: 'No quota has been entered for this period, so attainment cannot be '
-      + 'calculated. Quotas are set per person, per quarter.',
-    action: { label: 'Enter quotas', to: '/crm/forecast' },
+    // This card said "No quota has been entered for this period" without
+    // checking — false as soon as anyone entered one (H2, 2026-10-14). It states
+    // what is unbuilt, not a claim about the data.
+    reason: 'This card is not built yet. Attainment against entered quotas is '
+      + 'shown per person on the Team page (USD quotas only).',
+    action: { label: 'Open Team', to: '/team' },
   },
   {
     section: 'sales', title: 'Sales Forecast', icon: '📈',
@@ -706,27 +707,28 @@ const ReportsPage: React.FC = () => {
                   More
                   <ChevronDown className="w-4 h-4" />
                 </button>
+                {/* None of these exist yet; they were five buttons with no handler. */}
                 {showMoreMenu && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-10">
-                    <button className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2">
+                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-10">
+                    <button disabled title="Schedule Report Delivery is coming soon" className="w-full px-4 py-2 text-left text-sm text-gray-400 cursor-not-allowed flex items-center gap-2">
                       <Calendar className="w-4 h-4" />
-                      Schedule Report Delivery
+                      Schedule Report Delivery · Coming soon
                     </button>
-                    <button className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2">
+                    <button disabled title="Export All Reports (PDF) is coming soon" className="w-full px-4 py-2 text-left text-sm text-gray-400 cursor-not-allowed flex items-center gap-2">
                       <Download className="w-4 h-4" />
-                      Export All Reports (PDF)
+                      Export All Reports (PDF) · Coming soon
                     </button>
-                    <button className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2">
+                    <button disabled title="Report Settings is coming soon" className="w-full px-4 py-2 text-left text-sm text-gray-400 cursor-not-allowed flex items-center gap-2">
                       <Settings className="w-4 h-4" />
-                      Report Settings
+                      Report Settings · Coming soon
                     </button>
-                    <button className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2">
+                    <button disabled title="Manage Favorites is coming soon" className="w-full px-4 py-2 text-left text-sm text-gray-400 cursor-not-allowed flex items-center gap-2">
                       <Star className="w-4 h-4" />
-                      Manage Favorites
+                      Manage Favorites · Coming soon
                     </button>
-                    <button className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2">
+                    <button disabled title="Archived Reports is coming soon" className="w-full px-4 py-2 text-left text-sm text-gray-400 cursor-not-allowed flex items-center gap-2">
                       <FileText className="w-4 h-4" />
-                      Archived Reports
+                      Archived Reports · Coming soon
                     </button>
                   </div>
                 )}

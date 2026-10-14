@@ -531,19 +531,18 @@ export default function CustomReportBuilder() {
 
   const [config, setConfig] = useState<ReportConfig>(initialConfig);
   const [originalConfig, setOriginalConfig] = useState<ReportConfig>(initialConfig);
-  const [isSaving, setIsSaving] = useState(false);
+  // Saving and running are not built (see the note at the save buttons).
+  const isSaving = false;
   const [showMoreFields, setShowMoreFields] = useState(false);
   const [draggedField, setDraggedField] = useState<number | null>(null);
   const [showDiscardModal, setShowDiscardModal] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
-  const [isRunning, setIsRunning] = useState(false);
+  const isRunning = false;
   const [showDataSourceWarning, setShowDataSourceWarning] = useState(false);
   const [showTemplateGallery, setShowTemplateGallery] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [isPreviewUpdating, setIsPreviewUpdating] = useState(false);
   const [, setTimestampTick] = useState(0);
-  const [loadingProgress, setLoadingProgress] = useState(0);
-  const [recordsCount, setRecordsCount] = useState(247);
   const [isEditMode, setIsEditMode] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -582,17 +581,9 @@ export default function CustomReportBuilder() {
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
       const modifierKey = isMac ? e.metaKey : e.ctrlKey;
 
-      // Cmd/Ctrl + S - Save as Draft
-      if (modifierKey && e.key === 's') {
-        e.preventDefault();
-        handleSaveDraft();
-      }
-
-      // Cmd/Ctrl + Enter - Save & Run Report
-      if (modifierKey && e.key === 'Enter') {
-        e.preventDefault();
-        handleSaveAndRun();
-      }
+      // Ctrl/Cmd + S (save draft) and + Enter (save & run) are gone with the
+      // actions: saving reports is not built here yet (H2, 2026-10-14).
+      void modifierKey;
 
       // Esc - Cancel (with confirmation if changes)
       if (e.key === 'Escape') {
@@ -899,66 +890,11 @@ export default function CustomReportBuilder() {
     navigate('/crm/reports');
   };
 
-  const handleSaveDraft = async () => {
-    if (!validateConfig()) {
-      showToast('Please fix errors before saving', 'error');
-      return;
-    }
+  // handleSaveDraft waited 1 s on a setTimeout and toasted "Report saved as
+  // draft"; handleSaveAndRun ran a setInterval progress bar to 100 and then said
+  // nothing was saved. Both actions are disabled "Coming soon" until the
+  // saved-reports work (an unmerged branch) lands on main (H2, 2026-10-14).
 
-    setIsSaving(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsSaving(false);
-    showToast('Report saved as draft', 'success');
-    navigate('/crm/reports');
-  };
-
-  const handleSaveAndRun = async () => {
-    if (!validateConfig()) {
-      showToast('Please fix errors before saving', 'error');
-      return;
-    }
-
-    setIsSaving(true);
-    setIsRunning(true);
-    setLoadingProgress(0);
-
-    // Simulate progress
-    const progressInterval = setInterval(() => {
-      setLoadingProgress(prev => {
-        if (prev >= 90) return prev;
-        return prev + 10;
-      });
-    }, 200);
-
-    await new Promise(resolve => setTimeout(resolve, 2500));
-
-    setLoadingProgress(100);
-    clearInterval(progressInterval);
-
-    setTimeout(() => {
-      setIsSaving(false);
-      setIsRunning(false);
-      setLoadingProgress(0);
-      /*
-       * THIS USED TO SAY "Report created successfully" AND NAVIGATE AWAY.
-       *
-       * Nothing was created. There is no `reports` table and no endpoint — the
-       * 2.5-second wait above is a setTimeout and the progress bar counts to
-       * 100 on a setInterval. A success toast over a database that did not
-       * change is this project's signature failure, and it was sitting in the
-       * one place a user would trust it most: immediately after clicking Save.
-       *
-       * The report config is NOT discarded silently either — the toast says it
-       * was not saved, so the user knows to copy anything they need before
-       * leaving. Navigation is removed for the same reason: being bounced to a
-       * list that does not contain your report reads as a save that worked.
-       */
-      showToast(
-        'Not saved — the report builder is a preview and has no backend yet. Your configuration is still on screen.',
-        'error',
-      );
-    }, 300);
-  };
 
   const handleDeleteReport = () => {
     setShowDeleteModal(true);
@@ -1084,18 +1020,14 @@ export default function CustomReportBuilder() {
               Cancel
             </button>
             <button
-              onClick={handleSaveDraft}
-              disabled={isSaving || isRunning}
-              className="px-4 py-2 text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
+              disabled
+              title="Saving reports is coming soon"
+              className="px-4 py-2 text-sm bg-gray-100 text-gray-400 rounded-lg cursor-not-allowed whitespace-nowrap"
             >
-              {isSaving && !isRunning ? '⏳ Saving...' : '💾 Save as Draft'}
+              Save as Draft · Coming soon
             </button>
-            <Button
-              onClick={handleSaveAndRun}
-              disabled={isSaving || isRunning}
-              className="whitespace-nowrap"
-            >
-              {isRunning ? '⏳ Running...' : isEditMode ? '▶️ Update & Run' : '▶️ Save & Run'}
+            <Button disabled title="Running saved reports is coming soon" className="whitespace-nowrap">
+              {isEditMode ? 'Update & Run' : 'Save & Run'} · Coming soon
             </Button>
           </div>
         </div>
@@ -1945,18 +1877,6 @@ export default function CustomReportBuilder() {
                 </h3>
                 <div className="space-y-2 md:space-y-3 text-xs md:text-sm">
                   <div className="flex items-center justify-between gap-2 py-2 px-2 md:px-3 bg-white rounded-lg border border-gray-200">
-                    <span className="text-gray-700 text-xs md:text-sm">Save as Draft</span>
-                    <kbd className="px-2 md:px-3 py-1 bg-gray-100 border border-gray-300 rounded text-[10px] md:text-xs font-mono text-gray-800 whitespace-nowrap">
-                      Ctrl/Cmd + S
-                    </kbd>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 py-2 px-2 md:px-3 bg-white rounded-lg border border-gray-200">
-                    <span className="text-gray-700 text-xs md:text-sm">Save & Run</span>
-                    <kbd className="px-2 md:px-3 py-1 bg-gray-100 border border-gray-300 rounded text-[10px] md:text-xs font-mono text-gray-800 whitespace-nowrap">
-                      Ctrl/Cmd + ↵
-                    </kbd>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 py-2 px-2 md:px-3 bg-white rounded-lg border border-gray-200">
                     <span className="text-gray-700 text-xs md:text-sm">Cancel</span>
                     <kbd className="px-2 md:px-3 py-1 bg-gray-100 border border-gray-300 rounded text-[10px] md:text-xs font-mono text-gray-800 whitespace-nowrap">
                       Esc
@@ -2011,56 +1931,15 @@ export default function CustomReportBuilder() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleSaveDraft}
-            disabled={isSaving || isRunning}
-            title="Save as Draft (Ctrl/Cmd + S)"
-            className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-          >
-            {isSaving && !isRunning ? '⏳' : '💾 Draft'}
+          <button disabled title="Saving reports is coming soon"
+            className="px-4 py-2 text-sm bg-gray-100 text-gray-400 rounded-lg cursor-not-allowed whitespace-nowrap">
+            Draft · Soon
           </button>
-          <Button
-            onClick={handleSaveAndRun}
-            disabled={isSaving || isRunning}
-            title={isEditMode ? 'Update & Run Report (Ctrl/Cmd + Enter)' : 'Save & Run Report (Ctrl/Cmd + Enter)'}
-            className="whitespace-nowrap"
-          >
-            {isRunning ? '⏳' : isEditMode ? '▶️ Update' : '▶️ Run'}
+          <Button disabled title="Running saved reports is coming soon" className="whitespace-nowrap">
+            Run · Soon
           </Button>
         </div>
       </div>
-
-      {/* Saving Overlay */}
-      {isSaving && !isRunning && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl p-6 md:p-8 flex flex-col items-center gap-4 w-full max-w-xs md:max-w-sm">
-            <div className="animate-spin rounded-full h-10 w-10 md:h-12 md:w-12 border-b-2 border-blue-600"></div>
-            <p className="text-base md:text-lg font-medium text-gray-900">Saving report...</p>
-          </div>
-        </div>
-      )}
-
-      {/* Running Report Overlay */}
-      {isRunning && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl p-6 md:p-8 flex flex-col items-center gap-4 w-full max-w-sm md:max-w-md">
-            <div className="animate-spin rounded-full h-10 w-10 md:h-12 md:w-12 border-b-2 border-blue-600"></div>
-            <p className="text-base md:text-lg font-medium text-gray-900">Running report...</p>
-            <p className="text-xs md:text-sm text-gray-600">Analyzing {recordsCount} records...</p>
-
-            {/* Progress Bar */}
-            <div className="w-full mt-2">
-              <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                <div
-                  className="bg-brand-600 h-2 rounded-full transition-all duration-300 ease-out"
-                  style={{ width: `${loadingProgress}%` }}
-                ></div>
-              </div>
-              <p className="text-xs text-gray-500 mt-1 text-center">{loadingProgress}%</p>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showDiscardModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
