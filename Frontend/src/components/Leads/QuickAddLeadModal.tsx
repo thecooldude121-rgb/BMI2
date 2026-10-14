@@ -113,9 +113,10 @@ export default function QuickAddLeadModal({ onClose, onSuccess }: Props) {
         phone:   form.phone.trim() || undefined,
         company: form.company.trim() || undefined,
         source:  form.source,
-        owner_id: form.ownerId || 'unassigned',
+        // 'unassigned' was stored as an owner literally named "unassigned"; no
+        // owner is sent instead. No score: a new lead's is UNKNOWN, not 50.
+        owner_id: form.ownerId || undefined,
         status: 'new',
-        score: 50,
         email_opt_in: true,
         call_opt_in: true,
       });

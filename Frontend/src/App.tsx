@@ -89,7 +89,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       <MobileNavDrawer open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
       <div className="flex min-h-0 flex-1">
         <Sidebar />
-        <main className="min-w-0 flex-1 overflow-y-auto px-4 pb-4 lg:px-6 lg:pb-6">
+        {/* Figma's content area is inset on all four sides, top included (the
+            eyebrow sits 24px under the top bar at desktop width). */}
+        <main className="min-w-0 flex-1 overflow-y-auto p-4 lg:p-6">
           {/* Inside Layout on purpose: a page-level error must not take the
               sidebar and top bar down with it — the user needs to navigate away. */}
           <RouteShell>{children}</RouteShell>

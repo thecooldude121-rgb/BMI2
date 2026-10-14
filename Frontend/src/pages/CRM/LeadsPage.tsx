@@ -15,7 +15,7 @@ import KpiCard from '../../components/Leads/KpiCard';
 import LeadsPager from '../../components/Leads/LeadsPager';
 import EmptyState from '../../components/ui/EmptyState';
 import Alert from '../../components/ui/Alert';
-import { selectClass } from '../../components/ui/Field';
+import { filterSelectClass } from '../../components/ui/Field';
 import LeadTableRow from '../../components/Leads/LeadTableRow';
 import FilterChipBar from '../../components/Leads/FilterChipBar';
 import AdvancedFilterDrawer from '../../components/Leads/AdvancedFilterDrawer';
@@ -929,7 +929,7 @@ const LeadsPage: React.FC = () => {
                 </button>
               ))}
             </div>
-            <select aria-label="Status" value={filterState.status} onChange={e => setFilterStatus(e.target.value)} className={`${selectClass()} w-auto`}>
+            <select aria-label="Status" value={filterState.status} onChange={e => setFilterStatus(e.target.value)} className={filterSelectClass()}>
               {(statusViewMode === 'simplified'
                 ? [
                     { value: 'all', label: 'All' }, { value: '__incoming__', label: 'New' },
@@ -941,12 +941,12 @@ const LeadsPage: React.FC = () => {
                     .map(v => ({ value: v, label: v === 'all' ? 'All' : getStatusLabel(v) }))
               ).map(o => <option key={o.value} value={o.value}>Status: {o.label}</option>)}
             </select>
-            <select aria-label="Source" value={filterState.source} onChange={e => setFilterSource(e.target.value)} className={`${selectClass()} w-auto`}>
+            <select aria-label="Source" value={filterState.source} onChange={e => setFilterSource(e.target.value)} className={filterSelectClass()}>
               {['all', 'Lead Gen', 'HRMS', 'Manual', 'Website'].map(src => (
                 <option key={src} value={src}>Source: {src === 'all' ? 'All' : src}</option>
               ))}
             </select>
-            <select aria-label="Score" value={filterState.score} onChange={e => setFilterScore(e.target.value)} className={`${selectClass()} w-auto`}>
+            <select aria-label="Score" value={filterState.score} onChange={e => setFilterScore(e.target.value)} className={filterSelectClass()}>
               {[
                 { value: 'all', label: 'Any' }, { value: '80-100', label: '80–100' },
                 { value: '60-79', label: '60–79' }, { value: 'below-60', label: 'Below 60' },

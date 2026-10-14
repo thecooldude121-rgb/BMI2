@@ -164,7 +164,7 @@ describe('Activities — server page, server counts, real filters', () => {
     expect(screen.queryByText(/AI insights/i)).toBeNull();
     expect(screen.queryByText(/Sample content/i)).toBeNull();
     expect(screen.getByTestId('tile-overdue').className).toMatch(/danger-700/);
-    expect(screen.getByText('Since Sunday')).toBeInTheDocument();
+    expect(screen.getByText('Since Monday')).toBeInTheDocument();
     for (const v of ['Timeline', 'By Type', 'By Owner', 'By Account']) {
       expect(screen.getByRole('button', { name: new RegExp(v) })).toBeInTheDocument();
     }

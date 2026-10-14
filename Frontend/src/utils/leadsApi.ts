@@ -73,7 +73,7 @@ export function mapRowToLead(row: any): Lead {
     // nothing reads `lead.stage`. Setting both put an off-type property on every
     // lead and was the only type error in this file. (Lead.state, which does
     // exist, is the geographic state; unrelated despite the near-miss name.)
-    score:      row.score      ?? 0,
+    score:      row.score      ?? null,  // unknown stays unknown
     source:     row.source     || 'manual',
     owner_id:   row.owner_id   || '',
     tags:       Array.isArray(row.tags) ? row.tags : [],

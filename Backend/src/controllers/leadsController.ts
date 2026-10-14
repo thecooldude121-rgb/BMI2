@@ -60,7 +60,8 @@ const VALID_STATUSES = ['active', 'inactive', 'nurturing'] as const;
  * from the constraint violation, which is what 'abc', -5, 150 and even 55.5
  * all produced on both create and update.
  *
- * omitted / null stay valid: createLead writes `score ?? 0`.
+ * omitted / null stay valid: createLead stores NULL — an UNKNOWN score, never a
+ * default (decided 2026-10-13: the create forms used to send a fabricated 50).
  */
 function scoreError(v: unknown): string | null {
   if (v === undefined || v === null) return null;
@@ -137,8 +138,8 @@ export const getLeads = async (req: AuthRequest, res: Response, next: NextFuncti
  * matching leads in SQL (step 5 slice A). They used to be computed in the
  * browser over the ≤50 rows it had loaded. Accepts assigned_to_user_id (the
  * "own leads" display filter) so the figures match the list the user sees.
- * Week boundaries follow the page's own definitions (imported: week starting
- * Sunday; source quality: week starting Monday), in the database's time zone.
+ * Weeks start on MONDAY (decided 2026-10-13 — imported used to start on
+ * Sunday), in the database's time zone.
  */
 export const getLeadSummary = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -155,7 +156,7 @@ export const getLeadSummary = async (req: AuthRequest, res: Response, next: Next
          COUNT(*)::int AS total,
          COUNT(*) FILTER (WHERE l.created_at::date = CURRENT_DATE)::int AS new_today,
          COUNT(*) FILTER (WHERE coalesce(l.score, 0) >= 80)::int AS hot,
-         COUNT(*) FILTER (WHERE l.created_at >= date_trunc('week', CURRENT_DATE + 1) - interval '1 day'
+         COUNT(*) FILTER (WHERE l.created_at >= date_trunc('week', CURRENT_DATE)
                            AND (l.source ILIKE '%lead gen%' OR l.source ILIKE '%hrms%' OR l.source ILIKE '%apollo%'))::int AS imported_this_week,
          COUNT(*) FILTER (WHERE l.stage IN ('new', 'assigned') AND l.last_contact IS NULL)::int AS new_unworked,
          COUNT(*) FILTER (WHERE l.stage IN ('new', 'assigned') AND l.last_contact IS NULL
@@ -298,7 +299,7 @@ export const createLead = async (req: AuthRequest, res: Response, next: NextFunc
         industry || null,
         stage    || 'new',
         status   || 'active',   // lifecycle flag, not the pipeline stage
-        score    ?? 0,
+        score    ?? null,   // unknown, not 0 — nothing has measured a new lead
         source   || null,
         resolvedOwnerName,
         notes    || null,

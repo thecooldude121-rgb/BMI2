@@ -137,10 +137,11 @@ export default function ImportWizard({ onClose }: Props) {
           utm_source:    m.utm_source?.trim() || undefined,
           utm_medium:    m.utm_medium?.trim() || undefined,
           utm_campaign:  m.utm_campaign?.trim() || undefined,
-          quick_notes:   m.notes?.trim() || undefined,
-          owner_id:      rules.defaultOwnerId || 'unassigned',
+          // notes (the server never read quick_notes — imported notes were
+          // dropped); no 'unassigned' owner name; no fabricated score of 50.
+          notes:         m.notes?.trim() || undefined,
+          owner_id:      rules.defaultOwnerId || undefined,
           status:        rules.defaultStatus,
-          score:         50,
           tags:          allTags,
           email_opt_in:  true,
           call_opt_in:   true,

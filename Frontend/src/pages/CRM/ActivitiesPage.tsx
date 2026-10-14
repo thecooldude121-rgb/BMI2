@@ -9,7 +9,7 @@ import { Badge, type BadgeTone } from '../../components/ui/Badge';
 import { Alert } from '../../components/ui/Alert';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Modal } from '../../components/ui/Modal';
-import { selectClass, inputClass } from '../../components/ui/Field';
+import { selectClass, inputClass, filterSelectClass } from '../../components/ui/Field';
 import PageHeader from '../../components/Layout/PageHeader';
 import LeadsPager from '../../components/Leads/LeadsPager';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
@@ -70,7 +70,7 @@ function rangeFor(r: DateRange, now = new Date()): { occurred_after?: string; oc
   switch (r) {
     case 'today': return { occurred_after: d(y, m, t).toISOString(), occurred_before: d(y, m, t + 1).toISOString() };
     case 'yesterday': return { occurred_after: d(y, m, t - 1).toISOString(), occurred_before: d(y, m, t).toISOString() };
-    case 'week': { const s = t - now.getDay(); return { occurred_after: d(y, m, s).toISOString(), occurred_before: d(y, m, s + 7).toISOString() }; }
+    case 'week': { const s = t - ((now.getDay() + 6) % 7); /* Monday-start week */ return { occurred_after: d(y, m, s).toISOString(), occurred_before: d(y, m, s + 7).toISOString() }; }
     case 'month': return { occurred_after: d(y, m, 1).toISOString(), occurred_before: d(y, m + 1, 1).toISOString() };
     default: return {};
   }
@@ -242,21 +242,16 @@ const ActivitiesPage: React.FC = () => {
   const count = (k: keyof ActivitySummary) => (summary ? summary[k].toLocaleString() : '—');
 
   // Label, then the coloured value, then a caption (Figma 64:17786). Captions
-  // say what each server count is; "this week" starts on SUNDAY here (the
-  // frame's "Mon–Sun" is a product call, not copied).
+  // say what each server count is. Weeks run Monday–Sunday (decided 2026-10-13).
   const tiles: { label: string; key: keyof ActivitySummary; tone: string; caption: string }[] = [
     { label: 'Total', key: 'total', tone: 'text-brand-600', caption: activeFilters ? 'Matching these filters' : 'All logged activity' },
     { label: 'Today', key: 'today', tone: 'text-brand-600', caption: 'Your local day' },
-    { label: 'This Week', key: 'this_week', tone: 'text-brand-600', caption: 'Since Sunday' },
+    { label: 'This Week', key: 'this_week', tone: 'text-brand-600', caption: 'Since Monday' },
     { label: 'Overdue', key: 'overdue', tone: 'text-danger-700', caption: 'Planned, time has passed' },
     { label: 'Meetings Today', key: 'meetings_today', tone: 'text-success-700', caption: 'Meetings on your local day' },
     { label: 'Calls Today', key: 'calls_today', tone: 'text-success-700', caption: 'Calls on your local day' },
   ];
 
-  /** Figma's 32px filter select on the raised fill (see TasksPage's note on selectClass). */
-  const filterSelect =
-    'h-8 rounded-ctrl border border-line bg-white px-2.5 text-[13px] font-medium text-ink ' +
-    'focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30';
 
   const relatedLinks = (r: ActivityRecord) => {
     const out: { to: string; label: string; kind: string }[] = [];
@@ -317,8 +312,7 @@ const ActivitiesPage: React.FC = () => {
   };
 
   return (
-    // 24px under the top bar, as the frame and the Calendar have it.
-    <div className="space-y-6 pt-4 lg:pt-6">
+    <div className="space-y-6">
       <PageHeader
         eyebrow={`Customer interactions · ${new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`}
         title="Activities"
@@ -341,26 +335,26 @@ const ActivitiesPage: React.FC = () => {
 
       <Card padding="none" className="space-y-2 rounded-[12px] p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <select aria-label="Type" className={`${filterSelect} w-[120px]`} value={filterType} onChange={e => setFilterType(e.target.value)}>
+          <select aria-label="Type" className={`${filterSelectClass()} w-[120px]`} value={filterType} onChange={e => setFilterType(e.target.value)}>
             <option value="">Type: All</option>
             {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{cap(t)}</option>)}
           </select>
-          <select aria-label="Date" className={`${filterSelect} w-[130px]`} value={filterDate} onChange={e => setFilterDate(e.target.value as DateRange)}>
+          <select aria-label="Date" className={`${filterSelectClass()} w-[130px]`} value={filterDate} onChange={e => setFilterDate(e.target.value as DateRange)}>
             <option value="">Date: All</option>
             {(Object.keys(DATE_LABEL) as Exclude<DateRange, ''>[]).map(k => <option key={k} value={k}>{DATE_LABEL[k]}</option>)}
           </select>
-          <select aria-label="Owner" className={`${filterSelect} w-[130px]`} value={filterOwner} onChange={e => setFilterOwner(e.target.value)}>
+          <select aria-label="Owner" className={`${filterSelectClass()} w-[130px]`} value={filterOwner} onChange={e => setFilterOwner(e.target.value)}>
             <option value="">Owner: All</option>
             {users.map(u => <option key={u.id} value={u.displayName}>{u.displayName}</option>)}
           </select>
-          <select aria-label="Related" className={`${filterSelect} w-[165px]`} value={filterLinked} onChange={e => setFilterLinked(e.target.value as typeof filterLinked)}>
+          <select aria-label="Related" className={`${filterSelectClass()} w-[165px]`} value={filterLinked} onChange={e => setFilterLinked(e.target.value as typeof filterLinked)}>
             <option value="">Related: All</option>
             <option value="lead">Leads</option>
             <option value="deal">Deals</option>
             <option value="contact">Contacts</option>
             <option value="company">Accounts</option>
           </select>
-          <select aria-label="Status" className={`${filterSelect} w-[135px]`} value={filterStatus} onChange={e => setFilterStatus(e.target.value as StatusChoice)}>
+          <select aria-label="Status" className={`${filterSelectClass()} w-[135px]`} value={filterStatus} onChange={e => setFilterStatus(e.target.value as StatusChoice)}>
             <option value="">Status: All</option>
             <option value="completed">Completed</option>
             <option value="upcoming">Upcoming</option>

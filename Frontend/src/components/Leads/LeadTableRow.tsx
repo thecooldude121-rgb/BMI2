@@ -241,7 +241,7 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
   }
 
   // ── Display values ────────────────────────────────────────────────────────
-  const displayScore = lead.manual_score_override ?? lead.ai_score ?? lead.score ?? 0;
+  const displayScore = lead.manual_score_override ?? lead.ai_score ?? lead.score ?? null;
   const { label: statusLabel, cls: statusCls } = statusBadge(lead.status);
   const name = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || '—';
   const recency = lead.last_contact_date ? (formatRelativeDate(lead.last_contact_date) || lead.last_contact_date) : null;
@@ -308,7 +308,7 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
           >
             {/* Figma "84 stored": the value on the record, not a judgement —
                 it used to be a large green / yellow / red number. */}
-            <span className="text-xs leading-[18px] text-ink-muted">{displayScore} stored</span>
+            <span className="text-xs leading-[18px] text-ink-muted">{displayScore == null ? 'No stored score' : `${displayScore} stored`}</span>
             {lead.manual_score_override != null && (
               <Pencil size={10} className="text-ink-muted" aria-label="Manual override" />
             )}
@@ -417,7 +417,7 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
       initialFeedback={feedbackMark}
       onFeedbackSubmit={(type) => {
         setFeedbackMark(type);
-        actions.recordFeedback(lead, type, lead.ai_score ?? lead.score);
+        actions.recordFeedback(lead, type, lead.ai_score ?? lead.score ?? 0);
       }}
     />
     </>

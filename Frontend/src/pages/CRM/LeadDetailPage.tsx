@@ -313,7 +313,7 @@ const LeadDetailPage: React.FC = () => {
             <h1 className="text-[32px] font-bold leading-10 text-ink">{displayName}</h1>
             <Badge tone="brand" data-testid="lead-status">{stageLabel(lead.status)}</Badge>
             <Badge tone="neutral" title="The score stored on this lead record. See Score breakdown for the factors.">
-              Stored score {lead.score ?? 0}
+              {lead.score == null ? 'No stored score' : `Stored score ${lead.score}`}
             </Badge>
           </div>
           {(lead.position || lead.company) && (

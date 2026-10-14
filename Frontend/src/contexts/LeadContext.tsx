@@ -246,8 +246,10 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
     guardRead('getLead', () => fetchLeadByIdFromAPI(id), null);
 
   const createLead = async (lead: Partial<Lead>): Promise<Lead | null> => {
-    const payload = { ...lead, owner_id: lead.owner_id || user?.id };
-    const created = await guardWrite('createLead', () => createLeadViaAPI(payload), null);
+    // No owner is injected. This used to add `owner_id: user.id`, which the
+    // server stores as the owner's NAME (a bare user id as text). A caller
+    // that wants an owner sends assigned_to_user_id from the real user list.
+    const created = await guardWrite('createLead', () => createLeadViaAPI(lead), null);
     if (created) { setLeads(prev => [created, ...prev]); bumpWrites(); }
     return created;
   };

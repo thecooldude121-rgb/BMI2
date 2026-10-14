@@ -39,13 +39,14 @@ import { localDay, parseLocalDay } from '../../utils/dates';
  */
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+// Weeks start on MONDAY across the app (decided 2026-10-13).
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const MEETING_PAGE = 200;
 
-/** The 42 local days of the month grid, Sunday first. */
+/** The 42 local days of the month grid, Monday first. */
 function gridDays(month: Date): Date[] {
   const first = new Date(month.getFullYear(), month.getMonth(), 1);
-  return Array.from({ length: 42 }, (_, i) => new Date(first.getFullYear(), first.getMonth(), 1 - first.getDay() + i));
+  return Array.from({ length: 42 }, (_, i) => new Date(first.getFullYear(), first.getMonth(), 1 - ((first.getDay() + 6) % 7) + i));
 }
 
 const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
@@ -153,7 +154,7 @@ const Calendar: React.FC = () => {
   const step = (n: number) => setMonth(m => new Date(m.getFullYear(), m.getMonth() + n, 1));
 
   return (
-    <div className="space-y-6 pt-4 lg:pt-6">
+    <div className="space-y-6">
       <PageHeader
         eyebrow="Task calendar"
         title="Calendar"
@@ -223,7 +224,7 @@ const Calendar: React.FC = () => {
                       {date.getDate()}
                     </span>
                     {dm.slice(0, 2).map(m => (
-                      <span key={m.id} className="line-clamp-2 w-full rounded-[5px] px-1.5 py-1 text-xs leading-4 bg-sky-50 text-sky-800" title={m.title}>
+                      <span key={m.id} className="line-clamp-2 w-full rounded-[5px] border border-line border-l-[3px] border-l-sky-accent bg-surface-panel px-1.5 py-1 text-xs leading-4 text-ink" title={m.title}>
                         {m.date ? `${fmtTime(m.date)} ` : ''}{m.title}
                       </span>
                     ))}
@@ -253,7 +254,7 @@ const Calendar: React.FC = () => {
               <span><span className="text-brand-700" aria-hidden="true">● </span>Open task</span>
               <span><span className="text-danger-700" aria-hidden="true">● </span>Overdue task</span>
               <span><span className="text-ink-muted" aria-hidden="true">● </span>Completed task</span>
-              <span><span className="text-sky-700" aria-hidden="true">● </span>Meeting</span>
+              <span><span className="text-sky-accent" aria-hidden="true">● </span>Meeting</span>
               <span className="ml-auto">
               {meetingsError
                 ? `Meetings could not load — ${meetingsError}`

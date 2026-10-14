@@ -1,123 +1,117 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import DocumentDetailPage from './DocumentDetailPage';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 /**
- * The detail page's share picker, tested AT THE PAGE.
+ * H1 (2026-10-13) — Document detail shows the stored row and saves for real.
  *
- * WHY HERE AND NOT ONLY ON THE MODAL. `ShareDocumentModal` already has tests
- * asserting it filters nobody — and they all passed while this page was
- * dropping the signed-in user, because the page decides WHICH members the
- * modal receives. Reintroducing the exact bug left 564 tests green, which is
- * how it reached live testing in the first place.
- *
- * The defect: while consolidating three hardcoded colleague lists onto one
- * fetch, a self-filter was added to THIS page only — on an invented rule
- * ("never offer to share with yourself") applied to one of three surfaces. The
- * signed-in admin was missing here and present in the library and the upload
- * modal, so the same workspace showed a different team depending on the
- * screen. Consistency across the three is the property; the rule was never a
- * decision anyone made.
+ * Replaces the share-picker tests: the page's share modal is gone (sharing has
+ * no table, endpoint or permission model — CLAUDE.md "Document sharing does not
+ * exist"), and Share is a disabled "Coming soon". The roster-consistency
+ * property those tests guarded now applies only to the surfaces that still
+ * render a picker (the library and the upload modal).
  */
-
-const showToast = vi.fn();
-vi.mock('../../contexts/ToastContext', () => ({ useToast: () => ({ showToast }) }));
-vi.mock('react-router-dom', () => ({
-  useParams: () => ({ documentId: 'doc-1' }),
-  useNavigate: () => vi.fn(),
+const api = vi.hoisted(() => ({
+  fetchDocument: vi.fn(), updateDocument: vi.fn(), deleteDocument: vi.fn(), downloadDocument: vi.fn(),
 }));
+vi.mock('../../utils/documentsApi', () => api);
 
-/** The signed-in user IS a member of the roster below — that is the point. */
-const CURRENT_USER = { id: '5', name: 'David Kumar', email: 'david@bmicrm.com', role: 'Admin' };
-vi.mock('../../contexts/AuthContext', () => ({
-  useAuth: () => ({ user: { id: '5', name: 'David Kumar', email: 'david@bmicrm.com', role: 'Admin' } }),
-}));
+import DocumentDetailPage from './DocumentDetailPage';
 
-vi.mock('../../hooks/useWorkspaceMembers', async () => {
-  const actual = await vi.importActual<typeof import('../../hooks/useWorkspaceMembers')>(
-    '../../hooks/useWorkspaceMembers',
-  );
-  return {
-    // The real mapper, so the shape the modal receives is not faked.
-    toShareTarget: actual.toShareTarget,
-    useWorkspaceMembers: () => ({
-      members: [
-        { id: '1', name: 'Alex Rodriguez', email: 'alex@bmicrm.com', role: 'sales',
-          department: null, status: 'active', isActive: true, lastLoginAt: null,
-          createdAt: '2026-01-01T00:00:00.000Z', initials: 'AR',
-          avatarColor: 'from-blue-500 to-blue-600', canChangeRole: false },
-        { id: '5', name: 'David Kumar', email: 'david@bmicrm.com', role: 'admin',
-          department: null, status: 'active', isActive: true, lastLoginAt: null,
-          createdAt: '2026-01-01T00:00:00.000Z', initials: 'DK',
-          avatarColor: 'from-blue-500 to-blue-600', canChangeRole: false },
-      ],
-      loading: false,
-      error: null,
-    }),
-  };
+const row = (over: Record<string, unknown> = {}) => ({
+  id: 'doc-1', name: 'Proposal.pdf', file_url: null, file_type: 'application/pdf', file_size: 2048,
+  category: 'Proposal', description: 'Old text', module: null, record_id: null, version: 2, tags: ['q4'],
+  uploaded_by: 'David Kumar', created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-02T00:00:00.000Z',
+  storage_key: 'k/1', checksum_sha256: null, ...over,
 });
-
-vi.mock('../../utils/documentsApi', () => ({
-  downloadDocument: vi.fn(),
-  // The real contract: { ok, document } | { ok: false, notFound, message }.
-  fetchDocument: vi.fn(async () => ({
-    ok: true,
-    document: {
-      id: 'doc-1', name: 'Proposal.pdf', file_type: 'pdf', file_size: 1234,
-      category: 'Proposal', description: null, module: null, record_id: null,
-      version: 1, tags: [], uploaded_by: 'David Kumar',
-      created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-01T00:00:00.000Z',
-    },
-  })),
-}));
-
+let stored = row();
 beforeEach(() => {
-  showToast.mockReset();
-  vi.stubGlobal('localStorage', {
-    getItem: (k: string) => (k === 'authToken' ? 'test-token' : null),
-    setItem: () => {}, removeItem: () => {}, clear: () => {}, key: () => null, length: 0,
-  } as unknown as Storage);
+  vi.clearAllMocks();
+  stored = row();
+  api.fetchDocument.mockImplementation(async () => ({ ok: true, document: stored }));
+  api.updateDocument.mockImplementation(async (_id: string, patch: Record<string, unknown>) => { stored = { ...stored, ...patch }; return { ok: true }; });
+  api.deleteDocument.mockResolvedValue({ ok: true });
+  api.downloadDocument.mockResolvedValue({ ok: true });
 });
-afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
+const renderPage = () => render(
+  <MemoryRouter initialEntries={['/crm/documents/doc-1']}>
+    <Routes>
+      <Route path="/crm/documents/:documentId" element={<DocumentDetailPage />} />
+      <Route path="/crm/documents" element={<p>library</p>} />
+    </Routes>
+  </MemoryRouter>,
+);
 
-describe('DocumentDetailPage — the share picker', () => {
-  it('OFFERS THE SIGNED-IN USER, matching the other two share surfaces', async () => {
+describe('Document detail — real saves, nothing local-only', () => {
+  it('the description saves through the API and the page shows the RELOADED row', async () => {
     const user = userEvent.setup();
-    render(<DocumentDetailPage />);
-    await screen.findAllByText('Proposal.pdf');
-
-    // Open the share modal from the page's own control.
-    const shareButtons = await screen.findAllByRole('button', { name: /share/i });
-    await user.click(shareButtons[0]);
-
-    const picker = await screen.findByLabelText('Share with Team Member');
-    // David Kumar is the signed-in admin AND a member of the roster. He was
-    // filtered out here and nowhere else.
-    expect(within(picker).getByRole('option', { name: /David Kumar/ })).toBeInTheDocument();
-    expect(within(picker).getByRole('option', { name: /Alex Rodriguez/ })).toBeInTheDocument();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Edit' }));
+    const box = screen.getByLabelText('Description');
+    await user.clear(box); await user.type(box, 'Signed copy');
+    await user.click(screen.getByRole('button', { name: 'Save description' }));
+    expect(api.updateDocument).toHaveBeenCalledWith('doc-1', { description: 'Signed copy' });
+    expect(await screen.findByText('Description saved.')).toBeInTheDocument();
+    expect(screen.getByTestId('doc-description')).toHaveTextContent('Signed copy');
+    expect(api.fetchDocument).toHaveBeenCalledTimes(2);
   });
 
-  it('passes the roster through WHOLE — the page filters nobody', async () => {
+  it('a refused description save keeps the editor and says it was not saved', async () => {
+    api.updateDocument.mockResolvedValue({ ok: false, message: 'Could not save (500).' });
     const user = userEvent.setup();
-    render(<DocumentDetailPage />);
-    await screen.findAllByText('Proposal.pdf');
-
-    const shareButtons = await screen.findAllByRole('button', { name: /share/i });
-    await user.click(shareButtons[0]);
-
-    const picker = await screen.findByLabelText('Share with Team Member');
-    // Two members + the placeholder. Scoped to this select because the modal
-    // also renders a visibility select, and an unscoped count measures both.
-    await waitFor(() => expect(within(picker).getAllByRole('option')).toHaveLength(3));
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Edit' }));
+    await user.type(screen.getByLabelText('Description'), ' more');
+    await user.click(screen.getByRole('button', { name: 'Save description' }));
+    expect(await screen.findByText('The description was not saved — Could not save (500).')).toBeInTheDocument();
+    expect(screen.getByLabelText('Description')).toHaveValue('Old text more');
+    expect(screen.queryByText('Description saved.')).toBeNull();
   });
 
-  it('renders the signed-in user as the actor, not a hardcoded name', async () => {
-    // The same page hardcoded "Alex Rodriguez" as `currentUser` before this
-    // branch; the identity now comes from the session.
-    render(<DocumentDetailPage />);
-    await screen.findAllByText('Proposal.pdf');
-    expect(document.body.textContent ?? '').not.toContain('alex.rodriguez@bmi.com');
-    expect(CURRENT_USER.name).toBe('David Kumar');
+  it('tags are written to documents.tags — add and remove', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.type(await screen.findByLabelText('New tag'), 'signed');
+    await user.click(screen.getByRole('button', { name: /Add/ }));
+    expect(api.updateDocument).toHaveBeenCalledWith('doc-1', { tags: ['q4', 'signed'] });
+    await within(screen.getByRole('list', { name: 'Tags' })).findByText('signed');
+    await user.click(screen.getByRole('button', { name: 'Remove tag q4' }));
+    expect(api.updateDocument).toHaveBeenLastCalledWith('doc-1', { tags: ['signed'] });
+  });
+
+  it('Delete calls the API and leaves the page ONLY after it succeeds; a 403 is shown verbatim', async () => {
+    api.deleteDocument.mockResolvedValueOnce({ ok: false, message: 'Insufficient permissions' });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: /Delete document/ }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete document' }));
+    expect(await screen.findByText('“Proposal.pdf” was not deleted — Insufficient permissions')).toBeInTheDocument();
+    expect(screen.queryByText('library')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: /Delete document/ }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete document' }));
+    expect(await screen.findByText('library')).toBeInTheDocument();
+    expect(api.deleteDocument).toHaveBeenCalledTimes(2);
+  });
+
+  it('no comments, sharing, versions or activity log; Share and Archive are disabled', async () => {
+    const { container } = renderPage();
+    await screen.findByRole('button', { name: 'Edit' });
+    expect(screen.getByTitle('Sharing a document is coming soon')).toBeDisabled();
+    expect(screen.getByTitle('Archiving is coming soon')).toBeDisabled();
+    for (const gone of [/Post comment/i, /Restore/i, /Upload new version/i, /viewed document/i, /Send via email/i]) {
+      expect(container.textContent ?? '', String(gone)).not.toMatch(gone);
+    }
+  });
+
+  it('a missing document says so; an unreachable server is an error, not "not found"', async () => {
+    api.fetchDocument.mockResolvedValueOnce({ ok: false, notFound: true, message: 'Not found' });
+    const { unmount } = renderPage();
+    expect(await screen.findByText('Document not found')).toBeInTheDocument();
+    unmount();
+    api.fetchDocument.mockResolvedValueOnce({ ok: false, notFound: false, message: 'Could not reach the server.' });
+    renderPage();
+    expect(await screen.findByText('The document could not load')).toBeInTheDocument();
   });
 });
