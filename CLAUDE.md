@@ -1911,8 +1911,9 @@ old constraint, which fails the shared-name test.
     **Migration 070 (found in step a):** 056's `saved_reports.owner_id` and 057's
     `saved_report_schedules.created_by` used a bare `ON DELETE SET NULL` on a composite reference,
     which nulls `tenant_id` too (NOT NULL), so deleting such a user FAILED instead of clearing the
-    owner. 070 switches both to the column-listed form 060/064 use. Applied to the test DB;
-    **live waits for Venkat's OK** (both tables are empty there). `roundTrip.reportsSchema` (5) pins
+    owner. 070 switches both to the column-listed form 060/064 use. Applied to the test DB, then
+    on live 2026-10-15 on Venkat's OK (rolled-back dry run first, then the runner; checksum `be1f548a`;
+    both tables empty). `roundTrip.reportsSchema` (5) pins
     055's RLS (on, not forced), the role's lack of privilege, same-workspace recipients, the weekly
     CHECK and 070.
   - **b.** The reports connection, its role, and the query builder. **The role's password comes from
