@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '../../components/ui/Button';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { ChevronRight, Mail, Calendar, Video, Briefcase, Target, Trophy, TrendingUp, Clock, BarChart3, Users, Phone, MessageSquare, CheckCircle, Plus, CreditCard as Edit2, Trash2, AlertCircle, X, FileText, MoreVertical, StickyNote, Share2, RefreshCw, Download, Link2, Copy, Settings, Shield, Activity } from 'lucide-react';
+import { ChevronRight, Mail, Calendar, Video, Briefcase, Target, Trophy, TrendingUp, Clock, BarChart3, Users, Phone, MessageSquare, CheckCircle, Plus, CreditCard as Edit2, Trash2, AlertCircle, X, FileText, MoreVertical, StickyNote, Share2, Copy, Activity } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { PreviewBanner } from '../../components/common/PreviewBanner';
@@ -18,7 +18,9 @@ import { AddNoteModal } from '../../components/Team/AddNoteModal';
 import { ShareDocumentModal } from '../../components/Team/ShareDocumentModal';
 import { dayOrInstant } from '../../utils/dates';
 
-type Role = 'CEO' | 'VP' | 'Manager' | 'Rep' | 'Admin' | 'Analyst' | 'Support';
+// The ratified roles (admin / manager / sales). The page used CEO / VP / Rep /
+// Analyst / Support, which no user holds (H2, 2026-10-14).
+type Role = 'Admin' | 'Manager' | 'Sales' | 'Unknown';
 
 /*
  * `Role` above drives ONLY the developer "View as" switcher further down, which
@@ -105,9 +107,8 @@ export default function TeamMemberDetailPage() {
   // Display-only: nothing on this page writes to the API.
   const { user } = useAuth();
   const currentRole: Role =
-    user?.role === 'Admin' ? 'CEO' : user?.role === 'Manager' ? 'Manager' : user?.role === 'Sales' ? 'Rep' : 'Support';
+    user?.role === 'Admin' ? 'Admin' : user?.role === 'Manager' ? 'Manager' : user?.role === 'Sales' ? 'Sales' : 'Unknown';
   const [addNoteOpen, setAddNoteOpen] = useState(false);
-  const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
 
   // Modal states
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
@@ -288,40 +289,26 @@ export default function TeamMemberDetailPage() {
 
   // Comprehensive role-based permissions
   const canScheduleMeetings = currentRole === 'Manager';
-  const canAddNotes = ['CEO', 'VP', 'Manager'].includes(currentRole);
+  const canAddNotes = ['Admin', 'Manager'].includes(currentRole);
 
   // Direct Reports visibility logic
-  const canViewDirectReports = ['CEO', 'VP', 'Manager', 'Admin', 'Analyst'].includes(currentRole) && currentRole !== 'Rep';
-  const canTakeDirectReportActions = ['CEO', 'VP', 'Manager', 'Admin'].includes(currentRole);
-  const canEditNotes = currentRole === 'Manager' || currentRole === 'CEO';
-  const canViewPerformance = ['CEO', 'VP', 'Manager', 'Admin', 'Analyst'].includes(currentRole);
-  const canViewDeals = ['CEO', 'VP', 'Manager', 'Admin', 'Analyst'].includes(currentRole);
-  const canViewContacts = ['CEO', 'VP', 'Manager', 'Admin', 'Analyst'].includes(currentRole);
-  const canViewActivities = ['CEO', 'VP', 'Manager', 'Admin', 'Analyst'].includes(currentRole);
-  const canViewCoachingNotes = ['CEO', 'VP', 'Manager', 'Admin', 'Analyst'].includes(currentRole);
-  const hasLimitedView = currentRole === 'Rep';
-  const hasNoAccess = currentRole === 'Support';
+  const canViewDirectReports = ['Admin', 'Manager'].includes(currentRole);
+  const canTakeDirectReportActions = ['Admin', 'Manager'].includes(currentRole);
+  const canEditNotes = currentRole === 'Manager' || currentRole === 'Admin';
+  const canViewPerformance = ['Admin', 'Manager'].includes(currentRole);
+  const canViewDeals = ['Admin', 'Manager'].includes(currentRole);
+  const canViewContacts = ['Admin', 'Manager'].includes(currentRole);
+  const canViewActivities = ['Admin', 'Manager'].includes(currentRole);
+  const canViewCoachingNotes = ['Admin', 'Manager'].includes(currentRole);
+  const hasLimitedView = currentRole === 'Sales';
+  const hasNoAccess = currentRole === 'Unknown';
 
   // Quick Actions Toolbar - Role-based button visibility
   const showQuickActionsToolbar = !hasNoAccess; // Show for all except Support
-  const canSendEmail = !hasNoAccess; // All roles can send email
-  const canScheduleCall = ['CEO', 'VP', 'Manager', 'Admin'].includes(currentRole);
-  const canScheduleMeetingAction = ['CEO', 'VP', 'Manager', 'Admin'].includes(currentRole);
-  const canCreateTask = ['CEO', 'VP', 'Manager', 'Admin'].includes(currentRole);
-  const canAddNoteAction = ['CEO', 'VP', 'Manager'].includes(currentRole);
-  const canShareDocument = ['Manager', 'Admin'].includes(currentRole);
+  const canCreateTask = ['Admin', 'Manager'].includes(currentRole);
   const canUseMoreActions = !hasNoAccess;
 
   // Toggle functions
-  const toggleNoteExpansion = (noteId: string) => {
-    const newExpanded = new Set(expandedNotes);
-    if (newExpanded.has(noteId)) {
-      newExpanded.delete(noteId);
-    } else {
-      newExpanded.add(noteId);
-    }
-    setExpandedNotes(newExpanded);
-  };
 
   // Navigation handlers
   const handleBackToTeam = () => {
@@ -349,15 +336,7 @@ export default function TeamMemberDetailPage() {
     showToast(`Loading ${member.name}'s deals`, 'info');
   };
 
-  const handleViewAllContacts = () => {
-    navigate('/contacts');
-    showToast(`Loading ${member.name}'s contacts`, 'info');
-  };
 
-  const handleViewAllActivities = () => {
-    navigate('/activity');
-    showToast(`Loading ${member.name}'s activities`, 'info');
-  };
 
   const handleViewContact = (contactId: string, contactName: string) => {
     navigate(`/contacts/${contactId}`);
@@ -395,21 +374,9 @@ export default function TeamMemberDetailPage() {
     setCallModalOpen(false);
   };
 
-  const handleScheduleMeeting = () => {
-    setMeetingModalOpen(true);
-  };
 
-  const handleCreateTask = () => {
-    setTaskModalOpen(true);
-  };
 
-  const handleAddNote = () => {
-    setNoteModalOpen(true);
-  };
 
-  const handleShareDocument = () => {
-    setDocumentModalOpen(true);
-  };
 
   const handleEditNote = (note: CoachingNote) => {
     setSelectedNote(note);
@@ -464,58 +431,19 @@ export default function TeamMemberDetailPage() {
   };
 
   // More Actions handlers
-  const handleViewPerformanceDashboard = () => {
+
+
+
+
+
+  /** Confirms only after the clipboard accepted the text (it toasted regardless). */
+  const copyText = async (text: string, done: string) => {
     setMoreActionsOpen(false);
-    showToast('Opening performance dashboard...', 'info');
+    try { await navigator.clipboard.writeText(text); showToast(done, 'success'); }
+    catch { showToast('Could not copy — select the text and copy it yourself.', 'error'); }
   };
 
-  const handleRefreshData = () => {
-    setMoreActionsOpen(false);
-    // Was a setTimeout followed by "Profile data refreshed" — nothing refetched.
-    setTimeout(() => {
-      showToast('Reload the page to refresh this profile.', 'info');
-    }, 1000);
-  };
 
-  const handleExportProfile = () => {
-    setMoreActionsOpen(false);
-    // Was a setTimeout followed by "Profile exported successfully" — no file was produced.
-    setTimeout(() => {
-      showToast('Profile export is not available yet — no file was produced.', 'warning');
-    }, 1500);
-  };
-
-  const handleCopyProfileLink = () => {
-    setMoreActionsOpen(false);
-    const profileUrl = `${window.location.origin}/team/${member.id}`;
-    navigator.clipboard.writeText(profileUrl);
-    showToast('Profile link copied to clipboard', 'success');
-  };
-
-  const handleCopyEmail = () => {
-    setMoreActionsOpen(false);
-    navigator.clipboard.writeText(member.email);
-    showToast('Email address copied', 'success');
-  };
-
-  const handleUserSettings = () => {
-    setMoreActionsOpen(false);
-    if (currentRole === 'CEO') {
-      // Was navigate('/settings/team') — a route that does not exist.
-      navigate('/crm/settings');
-    } else {
-      showToast('Admin access required', 'error');
-    }
-  };
-
-  const handleViewAuditLog = () => {
-    setMoreActionsOpen(false);
-    if (currentRole === 'CEO') {
-      showToast('There is no audit log yet.', 'warning');
-    } else {
-      showToast('Admin access required', 'error');
-    }
-  };
 
   const saveNote = () => {
     showToast('Coaching notes are not stored yet — this note was not saved.', 'warning');
@@ -687,72 +615,39 @@ export default function TeamMemberDetailPage() {
           </div>
         </div>
 
-        {/* Quick Actions Toolbar - Sticky */}
+        {/* Quick Actions — H2 (2026-10-14). Email, call, meeting, note and share
+            opened modals that collected input and then said nothing was done;
+            they are disabled "Coming soon". Create Task opens the real task form.
+            The More menu's "View deals / contacts / activities / calendar /
+            performance" opened UNFILTERED lists (or routes that do not exist)
+            while toasting "Loading <name>'s deals", Refresh and Export waited on
+            timers, and the audit log does not exist. */}
         {showQuickActionsToolbar && (
           <div className="sticky top-0 z-10 bg-white border-b border-slate-200 shadow-sm px-6 py-4 mb-6">
             <div className="flex items-center gap-3 flex-wrap">
               <span className="text-sm text-slate-600 font-medium">Quick Actions:</span>
-
-              {canSendEmail && (
-                <button
-                  onClick={() => handleSendEmail()}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors text-sm font-medium text-slate-700 flex items-center gap-2"
-                >
-                  <Mail className="w-4 h-4" />
-                  Send Email
-                </button>
-              )}
-
-              {canScheduleCall && (
-                <button
-                  onClick={handleScheduleCall}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors text-sm font-medium text-slate-700 flex items-center gap-2"
-                >
-                  <Phone className="w-4 h-4" />
-                  Schedule Call
-                </button>
-              )}
-
-              {canScheduleMeetingAction && (
-                <button
-                  onClick={handleScheduleMeeting}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors text-sm font-medium text-slate-700 flex items-center gap-2"
-                >
-                  <Video className="w-4 h-4" />
-                  Sched Meeting
-                </button>
-              )}
-
               {canCreateTask && (
                 <button
-                  onClick={handleCreateTask}
+                  onClick={() => navigate('/crm/tasks?new=1')}
                   className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors text-sm font-medium text-slate-700 flex items-center gap-2"
                 >
                   <CheckCircle className="w-4 h-4" />
                   Create Task
                 </button>
               )}
-
-              {canAddNoteAction && (
-                <button
-                  onClick={handleAddNote}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors text-sm font-medium text-slate-700 flex items-center gap-2"
-                >
-                  <StickyNote className="w-4 h-4" />
-                  Add Note
+              {[
+                { label: 'Send Email', Icon: Mail },
+                { label: 'Schedule Call', Icon: Phone },
+                { label: 'Schedule Meeting', Icon: Video },
+                { label: 'Add Note', Icon: StickyNote },
+                { label: 'Share Document', Icon: Share2 },
+              ].map(({ label, Icon }) => (
+                <button key={label} type="button" disabled title={`${label} is coming soon`}
+                  className="px-4 py-2 bg-slate-50 rounded-lg text-sm font-medium text-slate-400 cursor-not-allowed flex items-center gap-2">
+                  <Icon className="w-4 h-4" />
+                  {label} · Coming soon
                 </button>
-              )}
-
-              {canShareDocument && (
-                <button
-                  onClick={handleShareDocument}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors text-sm font-medium text-slate-700 flex items-center gap-2"
-                >
-                  <Share2 className="w-4 h-4" />
-                  Share Document
-                </button>
-              )}
-
+              ))}
               {canUseMoreActions && (
                 <div className="relative" ref={moreActionsRef}>
                   <button
@@ -762,107 +657,23 @@ export default function TeamMemberDetailPage() {
                     <MoreVertical className="w-4 h-4" />
                     More Actions
                   </button>
-
                   {moreActionsOpen && (
                     <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-20">
-                      <button
-                        onClick={handleViewPerformanceDashboard}
-                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                      >
-                        <BarChart3 className="w-4 h-4" />
-                        View Performance Dashboard
+                      <button onClick={() => void copyText(`${window.location.origin}/team/${member.id}`, 'Profile link copied')}
+                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+                        <Copy className="w-4 h-4" /> Copy Profile Link
                       </button>
-                      <button
-                        onClick={() => {
-                          handleViewCalendar();
-                          setMoreActionsOpen(false);
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                      >
-                        <Calendar className="w-4 h-4" />
-                        View Calendar
+                      <button onClick={() => void copyText(member.email, 'Email address copied')}
+                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+                        <Copy className="w-4 h-4" /> Copy Email Address
                       </button>
-                      <button
-                        onClick={() => {
-                          handleViewAllDeals();
-                          setMoreActionsOpen(false);
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                      >
-                        <Briefcase className="w-4 h-4" />
-                        View Deals
-                      </button>
-                      <button
-                        onClick={() => {
-                          handleViewAllContacts();
-                          setMoreActionsOpen(false);
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                      >
-                        <Users className="w-4 h-4" />
-                        View Contacts
-                      </button>
-                      <button
-                        onClick={() => {
-                          handleViewAllActivities();
-                          setMoreActionsOpen(false);
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                      >
-                        <Activity className="w-4 h-4" />
-                        View Activities
-                      </button>
-
                       <div className="border-t border-slate-200 my-1"></div>
-
-                      <button
-                        onClick={handleRefreshData}
-                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                      >
-                        <RefreshCw className="w-4 h-4" />
-                        Refresh Data
-                      </button>
-                      <button
-                        onClick={handleExportProfile}
-                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                      >
-                        <Download className="w-4 h-4" />
-                        Export Profile (CSV/PDF)
-                      </button>
-                      <button
-                        onClick={handleCopyProfileLink}
-                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                      >
-                        <Link2 className="w-4 h-4" />
-                        Copy Profile Link
-                      </button>
-                      <button
-                        onClick={handleCopyEmail}
-                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                      >
-                        <Copy className="w-4 h-4" />
-                        Copy Email Address
-                      </button>
-
-                      {(currentRole === 'CEO') && (
-                        <>
-                          <div className="border-t border-slate-200 my-1"></div>
-                          <button
-                            onClick={handleUserSettings}
-                            className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                          >
-                            <Settings className="w-4 h-4" />
-                            User Settings (Admin only)
-                          </button>
-                          <button
-                            onClick={handleViewAuditLog}
-                            className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                          >
-                            <Shield className="w-4 h-4" />
-                            View Audit Log (Admin only)
-                          </button>
-                        </>
-                      )}
+                      {["This member's deals", "This member's contacts", "This member's activities", 'Export profile', 'Audit log'].map(label => (
+                        <button key={label} disabled title={`${label} — coming soon`}
+                          className="w-full text-left px-4 py-2 text-sm text-slate-400 cursor-not-allowed flex items-center gap-2">
+                          {label} · Coming soon
+                        </button>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -1186,36 +997,9 @@ export default function TeamMemberDetailPage() {
               )}
             </div>
 
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="text-sm font-semibold text-amber-900 mb-2">Coaching Notes Permissions:</h4>
-                  <div className="grid grid-cols-2 gap-4 text-xs">
-                    <div>
-                      <div className="font-semibold text-amber-800 mb-1">Who Can View:</div>
-                      <ul className="text-amber-700 space-y-0.5">
-                        <li>• Manager: View, Add, Edit, Delete all notes</li>
-                        <li>• CEO: View, Add notes (cannot edit others' notes)</li>
-                        <li>• VP: View, Add notes (for department members only)</li>
-                        <li>• Admin, Analyst: View all notes (read-only)</li>
-                        <li>• Rep: Cannot view coaching notes</li>
-                        <li>• Support: No access to team member profiles</li>
-                      </ul>
-                    </div>
-                    <div>
-                      <div className="font-semibold text-amber-800 mb-1">Who Can Add Notes:</div>
-                      <ul className="text-amber-700 space-y-0.5">
-                        <li>• Manager: Can add/edit/delete all notes</li>
-                        <li>• CEO: Can add notes (cannot edit others')</li>
-                        <li>• VP: Can add notes for department members</li>
-                        <li>• Admin, Analyst, Rep, Support: Cannot add notes</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            {/* A "Coaching Notes Permissions" box was here: an invented policy, in
+                roles nobody holds (CEO, VP, Analyst, Support), for notes that have
+                no table (H2, 2026-10-14). */}
 
             {addNoteOpen && (
               <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-5 mb-6">
@@ -1422,7 +1206,7 @@ export default function TeamMemberDetailPage() {
             </div>
 
             <div className="mt-6 text-sm text-slate-500 text-center">
-              Showing 3 of 3 total coaching notes
+              Showing {COACHING_NOTES.length} of {COACHING_NOTES.length} coaching notes
             </div>
           </div>
         )}

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { PreviewBanner } from '../../components/common/PreviewBanner';
 import type { AssignmentRule } from '../../utils/assignmentRules/types';
 import { createBlankRule, resetRulesToDefaults } from '../../utils/assignmentRules/rulesStore';
 import RuleList from '../../components/AssignmentRules/RuleList';
@@ -27,14 +28,23 @@ export default function AssignmentRulesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <div className="max-w-5xl mx-auto px-6 pt-4">
+        <PreviewBanner
+          detail="These rules are stored in this browser only and are NOT applied to any lead. New leads are not routed by them."
+          insteadTry="Server-side assignment rules on the real user list are coming soon. Choose an owner on the lead form."
+        />
+      </div>
       {/* Page header */}
       <div className="bg-white border-b border-gray-200 px-6 py-5">
         <div className="max-w-5xl mx-auto">
           <div className="flex items-start justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Assignment Rules</h1>
+              {/* It said "Automatically route incoming leads". Nothing applies these
+                  rules: they live in this browser, and no lead create path reads
+                  them (H2, 2026-10-14). */}
               <p className="text-sm text-gray-500 mt-1">
-                Automatically route incoming leads to the right owner based on source, score, territory, and more.
+                Draft routing rules by source, score and territory, and try them in the simulator.
               </p>
             </div>
             {tab === 'rules' && !editing && (
