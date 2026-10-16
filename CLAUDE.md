@@ -1946,7 +1946,27 @@ old constraint, which fails the shared-name test.
       deals, the builder's tenant predicate removed — all killed.
     - **Not in step b:** later phases' edits to `queryBuilder` / `registry` / `types` (Phases 2-8) arrive with
       their own steps.
-  - **c.** Saved reports and grants.
+  - **c.** Saved reports and grants. **BUILT 2026-10-16** (P3 Phase 2 as of `684812d`, plus the ownerless rule).
+    Backend only: `savedReportsController`, `routes/savedReports.ts` (`/api/v1/reports`), `services/reports/access.ts`.
+    Owner: view / edit / delete / share; an `edit` grant: view + edit; a `view` grant: view. Every permission is a
+    predicate IN the SQL, so a refused request matches zero rows; anything you may not see is 404, never 403.
+    A definition is valid iff the step-b builder compiles it. No UI yet — so "Shared with N people" and "Saved as
+    draft" stay away until the step that wires the page (e/f) shows them from this API.
+    - **Ownerless reports — decided by Venkat 2026-10-16.** A report is ownerless when it has no owner (070) or its
+      owner is deactivated (`is_active IS TRUE` is active, as `protect` reads it). A workspace ADMIN (live role) may
+      view it, delete it, or transfer it (`POST /reports/:id/transfer { to_user_id }`) to an ACTIVE member of the same
+      workspace, who gets full owner rights; the admin may NOT edit it or change its grants. While the owner is active
+      an admin has no access to a private report. `GET /reports/:id/transfer-candidates` lists active members of the
+      workspace only (the transfer re-checks: anyone else is a 400 naming `to_user_id`). Abilities gain `can_transfer`.
+    - **Migration 071 `saved_report_transfers`** records each transfer: from / to / by (composite references,
+      column-listed SET NULL) plus their names and the report name CAPTURED at the time, and `transferred_at` — so a
+      record outlives the report and the people. The transfer locks the report row alone, re-checks ownerless, moves
+      ownership, drops the new owner's old grant, and writes the record in one transaction.
+    - Tests: `roundTrip.savedReports` (22, Phase 2's; abilities now include `can_transfer`),
+      `roundTrip.savedReportsOwnerless` (5: active owner private; deactivated owner; deleted owner; another
+      workspace's admin 404 with the row unchanged; a record surviving its report and people). Mutation-tested (8,
+      all killed). 071: applied to the test DB; on live a rolled-back dry run only, pending Venkat's OK — the
+      backend's check mode will refuse to start on main until it is applied.
   - **d.** Run endpoints.
   - **e.** Report Detail BY ID (replaces the interim stub above; the Reports page's View controls
     come back pointing at real ids).
