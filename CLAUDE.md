@@ -1922,7 +1922,13 @@ old constraint, which fails the shared-name test.
     `services/reports/{types,registry,queryBuilder}.ts`, `config/reportsDatabase.ts`,
     `scripts/setupReportsRole.ts` (`npm run db:reports-role`), `REPORTS_QUERY_BUILDER_DESIGN.md`.
     Nothing calls the pool yet (endpoints are step d).
-    - **The pool refuses to start** without `REPORTS_DB_USER` AND a non-empty `REPORTS_DB_PASSWORD`,
+    - **Missing reports settings stop ONLY reports, never the backend — decided by Venkat 2026-10-15.**
+      The pool is created lazily on the first report run and the boot file (`index.ts`) never touches it,
+      so login and every other route work without `REPORTS_DB_*`; a report run refuses with
+      `ReportsPoolUnavailable`. If a startup check is ever added it must log and carry on, never exit.
+      `roundTrip.reportsSettingsOptional` (3) pins it; mutation-tested (an app-pool fallback, the
+      missing-settings guard removed, the boot file importing the module — all killed).
+    - **The reports pool refuses to start** without `REPORTS_DB_USER` AND a non-empty `REPORTS_DB_PASSWORD`,
       refuses `REPORTS_DB_USER = DB_USER`, never falls back to the app pool, and proves RLS is live
       BEHAVIOURALLY before serving (no tenant set must return 0 deals) — so a copied superuser or any
       BYPASSRLS role is refused too. Every run is `BEGIN READ ONLY` with `SET LOCAL` tenant and
