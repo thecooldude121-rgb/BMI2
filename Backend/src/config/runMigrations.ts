@@ -29,6 +29,30 @@ import { pool } from './database';
  */
 
 const MIGRATIONS_DIR = path.resolve(__dirname, '../../migrations');
+
+/**
+ * WHAT THE SERVER DOES WITH MIGRATIONS WHEN IT STARTS — decided by Venkat
+ * 2026-10-15: check, never apply, unless told otherwise.
+ *
+ *   MIGRATIONS_ON_BOOT=check  (the default) — validate the ledger and REFUSE TO
+ *                             START if any migration is pending, naming each one.
+ *                             Writes nothing to the database.
+ *   MIGRATIONS_ON_BOOT=apply  — apply pending migrations on boot (the old
+ *                             behaviour). For a disposable test database only.
+ *
+ * Why: every backend used to apply whatever files were in the folder it ran
+ * from, so starting a server from a feature worktree, or saving a source file
+ * under `npm run dev`, changed the live schema (lesson 17). Live now changes
+ * only through `npm run db:migrate`, after a rolled-back dry run — that command
+ * always applies, whatever this is set to. Any other value refuses to boot: a
+ * typo must not silently pick a mode.
+ */
+export type BootMode = 'check' | 'apply';
+export const migrationsOnBootMode = (raw = process.env.MIGRATIONS_ON_BOOT): BootMode => {
+  if (raw === undefined || raw === '' || raw === 'check') return 'check';
+  if (raw === 'apply') return 'apply';
+  throw new Error(`MIGRATIONS_ON_BOOT is "${raw}"; it must be "check" (the default) or "apply".`);
+};
 const BASELINE = '000_baseline_schema.sql';
 
 /** Migrations already folded into the baseline. Recorded, never executed. */
@@ -51,6 +75,11 @@ const checksum = (s: string): string => {
   let h = 5381;
   for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
   return h.toString(16).padStart(8, '0');
+};
+
+const ledgerExists = async (): Promise<boolean> => {
+  const { rows } = await pool.query(`SELECT to_regclass('public.schema_migrations') IS NOT NULL AS ok`);
+  return rows[0].ok === true;
 };
 
 const ensureLedger = async (): Promise<void> => {
@@ -105,6 +134,8 @@ export interface MigrationStatus {
   failed?: { filename: string; error: string };
   /** Migrations that exist but were not applied because an earlier one failed. */
   skipped: string[];
+  /** Check mode only: migrations present in the folder and absent from the ledger. */
+  pending?: string[];
 }
 
 /** Last run's outcome, so /health can report a degraded schema. */
@@ -138,17 +169,27 @@ const abort = (message: string, detail?: string): void => {
   ]);
 };
 
-export const runMigrations = async (): Promise<void> => {
-  await ensureLedger();
+export interface RunOptions {
+  /** 'apply' (the default for direct callers and `npm run db:migrate`) or 'check'. */
+  mode?: BootMode;
+  /** Test seam: a different migrations folder. */
+  dir?: string;
+}
 
-  if (!fs.existsSync(MIGRATIONS_DIR)) {
-    abort(`migrations directory not found at ${MIGRATIONS_DIR}`);
+export const runMigrations = async ({ mode = 'apply', dir = MIGRATIONS_DIR }: RunOptions = {}): Promise<void> => {
+  const check = mode === 'check';
+  // Check mode writes nothing — not even the ledger table. A database without a
+  // ledger simply has every migration pending.
+  const hasLedger = check ? await ledgerExists() : (await ensureLedger(), true);
+
+  if (!fs.existsSync(dir)) {
+    abort(`migrations directory not found at ${dir}`);
     lastStatus = { ok: false, applied: 0, skipped: [], failed: { filename: '(directory)', error: 'not found' } };
     return;
   }
 
   const files = fs
-    .readdirSync(MIGRATIONS_DIR)
+    .readdirSync(dir)
     .filter(f => f.endsWith('.sql'))
     .sort();
 
@@ -168,16 +209,17 @@ export const runMigrations = async (): Promise<void> => {
     if (!prior) seen.set(prefix, f);
   }
 
-  const { rows: appliedRows } = await pool.query<{ filename: string; checksum: string }>(
-    'SELECT filename, checksum FROM public.schema_migrations'
-  );
+  const { rows: appliedRows } = hasLedger
+    ? await pool.query<{ filename: string; checksum: string }>('SELECT filename, checksum FROM public.schema_migrations')
+    : { rows: [] as { filename: string; checksum: string }[] };
   const applied = new Map(appliedRows.map(r => [r.filename, r.checksum]));
 
   const populated = await databaseIsPopulated();
   let ran = 0;
+  const pending: string[] = [];
 
   for (const filename of files) {
-    const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, filename), 'utf8');
+    const sql = fs.readFileSync(path.join(dir, filename), 'utf8');
     const sum = checksum(sql);
 
     const previous = applied.get(filename);
@@ -187,7 +229,7 @@ export const runMigrations = async (): Promise<void> => {
       // later migrations legitimately changes its contents, and on an existing
       // database it is never executed anyway. Keep the ledger row current.
       if (filename === BASELINE) {
-        if (previous !== sum) {
+        if (previous !== sum && !check) {
           await pool.query('UPDATE public.schema_migrations SET checksum = $2 WHERE filename = $1', [filename, sum]);
         }
         continue;
@@ -201,6 +243,13 @@ export const runMigrations = async (): Promise<void> => {
         lastStatus = { ok: false, applied: ran, skipped: [], failed: { filename, error: 'checksum mismatch' } };
         return;
       }
+      continue;
+    }
+
+    // Not in the ledger. Check mode only lists it — including the record-only
+    // cases below, which would still write a ledger row.
+    if (check) {
+      pending.push(filename);
       continue;
     }
 
@@ -244,6 +293,26 @@ export const runMigrations = async (): Promise<void> => {
     } finally {
       client.release();
     }
+  }
+
+  if (check) {
+    if (pending.length > 0) {
+      lastStatus = { ok: false, applied: 0, skipped: [], pending };
+      // Refused regardless of NODE_ENV or MIGRATIONS_FAIL_FAST: serving against
+      // a schema the code expects to be newer is the thing this mode prevents.
+      console.error(
+        `FATAL: ${pending.length} migration(s) pending and MIGRATIONS_ON_BOOT is "check", so the server will not start:\n` +
+        pending.map(f => `     ${f}`).join('\n') + '\n' +
+        'Apply them with `npm run db:migrate` (on live: after a rolled-back dry run), ' +
+        'or set MIGRATIONS_ON_BOOT=apply for a disposable test database.',
+      );
+      process.exit(1);
+      return;
+    }
+    lastStatus = { ok: true, applied: 0, skipped: [], pending: [] };
+    console.log(`✅ migrations: up to date (${files.length} known; checked, not applied)`);
+    await warnOnNaiveTimestamps();
+    return;
   }
 
   lastStatus = { ok: true, applied: ran, skipped: [] };
