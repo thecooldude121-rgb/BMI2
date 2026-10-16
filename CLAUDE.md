@@ -2475,6 +2475,9 @@ like every other FK here) or stays a slug with a composite FK to a unique
 `(tenant_id, slug)`. 038 asserts the two agree today, so the fix starts from a clean state.
 
 ## Known gaps in the auth shell
+- **Login incident, 2026-10-16 — cause and fix.** Nobody could sign in because the backend on :5001 was
+  not running (not the rate limit, CORS, the reports `.env` lines or stopping old processes); restarting it
+  from `BMI2/Backend` fixed it. Use `http://localhost:5173` — Vite listens on `::1`, so `127.0.0.1:5173` does not load.
 - **Password reset is NOT built.** The "Forgot password?" link goes nowhere. It needs, in
   dependency order: transactional email delivery (provider, sender domain, SPF/DKIM) — this
   is the decision that blocks everything else; a `password_resets` table of single-use
