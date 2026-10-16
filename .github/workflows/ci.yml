@@ -105,6 +105,36 @@ jobs:
         # shape fails here rather than months later.
         run: npm run db:migrate
 
+      - name: Give the reports role a password (this run only)
+        working-directory: Backend
+        # Migration 055 creates bmi_reports_ro NOLOGIN with no password, and the
+        # reports pool refuses to start without REPORTS_DB_USER/PASSWORD. A random
+        # password per run, handed to the tests through GITHUB_ENV — never a value
+        # in git. Unlike a developer machine on `trust`, this Postgres checks
+        # passwords on TCP, so the step also proves a WRONG password is refused.
+        run: |
+          pw="$(node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64url'))")"
+          echo "::add-mask::$pw"
+          echo "REPORTS_DB_USER=bmi_reports_ro" >> "$GITHUB_ENV"
+          echo "REPORTS_DB_PASSWORD=$pw" >> "$GITHUB_ENV"
+          REPORTS_PW="$pw" node -e "
+            const { Client } = require('pg');
+            const base = { host: process.env.DB_HOST, port: +process.env.DB_PORT, database: process.env.DB_NAME };
+            (async () => {
+              const admin = new Client({ ...base, user: process.env.DB_USER, password: process.env.DB_PASSWORD });
+              await admin.connect();
+              const q = (await admin.query('SELECT quote_literal(\$1) AS q', [process.env.REPORTS_PW])).rows[0].q;
+              await admin.query('ALTER ROLE bmi_reports_ro LOGIN PASSWORD ' + q);
+              await admin.end();
+              const wrong = new Client({ ...base, user: 'bmi_reports_ro', password: 'not-the-password' });
+              const refused = await wrong.connect().then(() => false, () => true);
+              await wrong.end().catch(() => {});
+              if (!refused) { console.error('bmi_reports_ro logged in with a WRONG password'); process.exit(1); }
+              const right = new Client({ ...base, user: 'bmi_reports_ro', password: process.env.REPORTS_PW });
+              await right.connect(); await right.end();
+              console.log('bmi_reports_ro: wrong password refused, right password accepted');
+            })().catch(e => { console.error(e.message); process.exit(1); });"
+
       - name: Round-trip tests
         working-directory: Backend
         run: npm run test:isolation

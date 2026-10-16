@@ -1918,7 +1918,34 @@ old constraint, which fails the shared-name test.
     CHECK and 070.
   - **b.** The reports connection, its role, and the query builder. **The role's password comes from
     configuration (an env var), never passwordless and never hardcoded**; the server refuses to use
-    the reports connection without it.
+    the reports connection without it. **BUILT 2026-10-15** (P3 Phases 0-1 as of `9af7512`):
+    `services/reports/{types,registry,queryBuilder}.ts`, `config/reportsDatabase.ts`,
+    `scripts/setupReportsRole.ts` (`npm run db:reports-role`), `REPORTS_QUERY_BUILDER_DESIGN.md`.
+    Nothing calls the pool yet (endpoints are step d).
+    - **Missing reports settings stop ONLY reports, never the backend — decided by Venkat 2026-10-15.**
+      The pool is created lazily on the first report run and the boot file (`index.ts`) never touches it,
+      so login and every other route work without `REPORTS_DB_*`; a report run refuses with
+      `ReportsPoolUnavailable`. If a startup check is ever added it must log and carry on, never exit.
+      `roundTrip.reportsSettingsOptional` (3) pins it; mutation-tested (an app-pool fallback, the
+      missing-settings guard removed, the boot file importing the module — all killed).
+    - **The reports pool refuses to start** without `REPORTS_DB_USER` AND a non-empty `REPORTS_DB_PASSWORD`,
+      refuses `REPORTS_DB_USER = DB_USER`, never falls back to the app pool, and proves RLS is live
+      BEHAVIOURALLY before serving (no tenant set must return 0 deals) — so a copied superuser or any
+      BYPASSRLS role is refused too. Every run is `BEGIN READ ONLY` with `SET LOCAL` tenant and
+      statement timeout.
+    - **`npm run db:reports-role`** generates 32 random bytes, `ALTER ROLE bmi_reports_ro LOGIN PASSWORD`,
+      and writes both values to the gitignored `Backend/.env` (now really mode 600 — `writeFileSync`'s
+      mode only applies on create) without printing the password. Run on 2026-10-15: the role is LOGIN
+      with a SCRAM password on the local cluster (live and test share it).
+    - **Locally the password is NOT checked** — `pg_hba.conf` is `trust` for loopback (Postgres listens on
+      loopback only). **CI does check it:** a workflow step gives the role a random per-run password via
+      `GITHUB_ENV` and FAILS if a wrong password is accepted.
+    - Tests: `reportQueryBuilder` (29), `roundTrip.reportsRls` (12: + empty password refused, + a
+      BYPASSRLS role that is not DB_USER refused). Mutation-tested: empty password allowed, DB_USER guard
+      removed, behavioural RLS check skipped (survived until the BYPASSRLS test was added), RLS disabled on
+      deals, the builder's tenant predicate removed — all killed.
+    - **Not in step b:** later phases' edits to `queryBuilder` / `registry` / `types` (Phases 2-8) arrive with
+      their own steps.
   - **c.** Saved reports and grants.
   - **d.** Run endpoints.
   - **e.** Report Detail BY ID (replaces the interim stub above; the Reports page's View controls
