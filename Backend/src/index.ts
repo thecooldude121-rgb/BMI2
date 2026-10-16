@@ -1,10 +1,18 @@
 import dotenv from 'dotenv';
 import { connectDB } from './config/database';
-import { runMigrations } from './config/runMigrations';
+import { runMigrations, migrationsOnBootMode } from './config/runMigrations';
 import { createApp } from './app';
 import { assertEmailConfigured, getEmailService } from './services/email';
 
 dotenv.config();
+
+// An unknown MIGRATIONS_ON_BOOT value refuses to boot rather than guessing a mode.
+try {
+  migrationsOnBootMode();
+} catch (error) {
+  console.error(`FATAL: ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(1);
+}
 
 if (!process.env.JWT_SECRET) {
   console.error('FATAL: JWT_SECRET is not set in the environment. Refusing to start.');
@@ -34,7 +42,9 @@ const PORT = process.env.PORT || 5000;
 // 007/008/009 verbatim from the .sql files with nothing keeping them in sync.
 const start = async () => {
   await connectDB();
-  await runMigrations();
+  // MIGRATIONS_ON_BOOT: 'check' by default — a pending migration refuses to
+  // start rather than being applied. See migrationsOnBootMode.
+  await runMigrations({ mode: migrationsOnBootMode() });
   app.listen(PORT, () => {
     console.log(`🚀 BMI2 Backend running on http://localhost:${PORT}`);
     console.log(`📋 API base: http://localhost:${PORT}/api/v1`);

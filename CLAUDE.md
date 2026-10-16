@@ -3009,6 +3009,18 @@ something directly, do that instead of reasoning about what should be true.**
    Finalise and validate the migration FIRST (apply it to `bmi_crm_iso_test`, and run it
    against live inside a transaction that is rolled back), then edit backend source.
 
+   **CLOSED 2026-10-16 — `MIGRATIONS_ON_BOOT`, decided by Venkat 2026-10-15.** The server
+   no longer applies migrations when it starts. `check` (the DEFAULT) validates the ledger
+   and REFUSES TO START if any migration is pending, naming each file, and writes nothing —
+   not even the ledger table. `apply` restores the old behaviour, for a disposable test
+   database only (e.g. a second backend on :5002 against `bmi_crm_iso_test` — or run
+   `npm run db:migrate` there first). Any other value refuses to boot. **Live changes only
+   through `npm run db:migrate`** (which always applies), after a rolled-back dry run.
+   Checksum mismatches and duplicate numbers keep their existing handling (`MIGRATIONS_FAIL_FAST`).
+   `roundTrip.migrationsOnBoot` (5); mutation-tested (check applying, default `apply`, no
+   exit on pending, boot ignoring the mode — all killed); a real boot against an empty
+   scratch database refused with all 72 files named and left 0 tables.
+
 18. **The Vite dev server keeps the Tailwind config it STARTED with — so a token added later
    silently renders as nothing, and a browser check on that server is checking stale CSS.**
    Seen twice in one day: after Phase 0 (`text-ink` "does not exist", a blank page) and after
