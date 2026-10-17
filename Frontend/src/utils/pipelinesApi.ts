@@ -17,7 +17,7 @@
  * change so there is one way to ask.
  */
 
-const API_BASE = 'http://localhost:5001/api/v1';
+import { API_BASE } from '../config/backend';
 
 function getAuthHeaders(): HeadersInit {
   const token = localStorage.getItem('authToken');
@@ -377,7 +377,6 @@ export const outcomeOf = (lookup: StageLookup) => <T extends StagedDeal>(d: T): 
 export const isWonWith  = (lookup: StageLookup) => <T extends StagedDeal>(d: T) => outcomeOf(lookup)(d) === 'won';
 export const isLostWith = (lookup: StageLookup) => <T extends StagedDeal>(d: T) => outcomeOf(lookup)(d) === 'lost';
 export const isOpenWith = (lookup: StageLookup) => <T extends StagedDeal>(d: T) => outcomeOf(lookup)(d) === 'open';
-
 
 /**
  * The probability to weight a deal by — or NULL, meaning "do not weight it".

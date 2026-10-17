@@ -3,7 +3,10 @@
  * same origin as every other API call. The server answers 200 only when the
  * migrations are in order AND Postgres answered a SELECT 1 just now.
  */
-const HEALTH_URL = 'http://localhost:5001/health';
+
+import { BACKEND_ORIGIN } from '../config/backend';
+
+const HEALTH_URL = `${BACKEND_ORIGIN}/health`;
 
 export type ConnectionState = 'connected' | 'degraded' | 'unreachable';
 

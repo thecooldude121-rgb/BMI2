@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertCircle, Building2, CheckCircle, Eye, EyeOff, Lock, Mail, User } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
+import { API_BASE } from '../../config/backend';
 
 /**
  * Create an account.
@@ -28,7 +29,6 @@ import { useAuth } from '../../contexts/AuthContext';
  * 'sales' server-side and cannot be influenced from here.
  */
 
-const API_BASE = 'http://localhost:5001/api/v1';
 const MIN_PASSWORD_LENGTH = 8; // mirrors authController.register
 
 interface FormState {

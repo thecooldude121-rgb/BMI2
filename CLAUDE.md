@@ -2841,10 +2841,15 @@ on the frontend job's `setup-node` step — read it there rather than trusting a
 ### Venkat runs the app — my checks run on SEPARATE ports (decided 2026-10-17)
 - **Venkat's own app runs on :5001 (backend) and :5173 (frontend), started with `./scripts/dev.sh`. Never stop,
   restart or reuse either without asking first.**
-- Every check of mine runs on separate ports: a backend on **:5002** against `bmi_crm_iso_test`
-  (`DB_NAME=bmi_crm_iso_test PORT=5002 MIGRATIONS_ON_BOOT=check CLIENT_URL=http://localhost:5174`) and the branch's
-  frontend on **:5174** (an allowed CORS origin), with the browser's API calls rerouted from :5001 to :5002. Stop
-  only those processes afterwards, and remove any seeded data and re-count.
+- Every check of mine runs on separate ports, started with **`./scripts/e2e-servers.sh`** (2026-10-18): a backend on
+  **:5002** against `bmi_crm_iso_test` (the script refuses any database not ending in `_test`) and the branch's frontend on
+  **:5174** in `vite --mode e2e`, given its backend address explicitly. **In e2e mode the address has NO default and :5001
+  is refused** (`Frontend/src/config/backendOrigin.ts`), checked when Vite starts and again when the page loads, so a
+  misconfiguration fails loudly instead of reaching live. The address is fixed at build time, so a reload cannot lose it.
+  (Before this, a script injected into the page rerouted :5001 to :5002; a reload dropped it and one request reached
+  Venkat's backend — the reason for the change.) Stop only those processes afterwards; remove seeded data and re-count.
+- **The backend address lives in ONE place**, `Frontend/src/config/backend.ts` (`API_BASE`, `BACKEND_ORIGIN`); 27 files
+  used to hardcode `http://localhost:5001`. A test fails if any other source file names `localhost:5001` again.
 
 ### Deliberate breakages (mutation tests) happen ONLY in a separate copy (decided 2026-10-17)
 - **Every deliberate breakage, frontend as well as backend, is made in a separate copy of the repo (a scratch git

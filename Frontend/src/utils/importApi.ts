@@ -15,7 +15,7 @@
  * your file" cannot disagree.
  */
 
-const API_BASE = 'http://localhost:5001/api/v1';
+import { API_BASE } from '../config/backend';
 
 function getAuthHeaders(): HeadersInit {
   const token = localStorage.getItem('authToken');

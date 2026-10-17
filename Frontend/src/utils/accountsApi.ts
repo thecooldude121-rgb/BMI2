@@ -1,4 +1,5 @@
 import type { EnhancedAccount } from '../types/accounts';
+import { API_BASE } from '../config/backend';
 
 /**
  * Accounts API client.
@@ -21,8 +22,6 @@ import type { EnhancedAccount } from '../types/accounts';
  * defaults (documented inline); none of them are scores, ratings or money.
  * When a real column appears, map it here and delete the default.
  */
-
-const API_BASE = 'http://localhost:5001/api/v1';
 
 function getAuthHeaders(): HeadersInit {
   const token = localStorage.getItem('authToken');
