@@ -178,3 +178,39 @@ export async function revokeGrant(reportId: string, userId: number): Promise<voi
 /** "Shared with 1 person" / "Shared with 3 people" / "Not shared". */
 export const sharedWithLabel = (n: number): string =>
   n === 0 ? 'Not shared' : `Shared with ${n} ${n === 1 ? 'person' : 'people'}`;
+
+// ── Ownerless reports: admin transfer (step c's endpoints) ────────────────
+//
+// Only a workspace admin, only on an OWNERLESS report (no owner, or a
+// deactivated one). Anyone else, or an admin while the owner is active, gets
+// 404. The candidates are active members of this workspace only, and the
+// server re-checks the choice (400 otherwise). Every transfer is recorded.
+
+export interface TransferCandidate { id: number; name: string | null; email: string }
+
+export interface TransferRecord {
+  from_user_id: number | null;
+  from_user_name: string | null;
+  to_user_id: number;
+  to_user_name: string;
+  transferred_by: number;
+  transferred_by_name: string;
+  transferred_at: string;
+}
+
+export async function fetchTransferCandidates(reportId: string): Promise<TransferCandidate[]> {
+  const json = await unwrap(await fetch(
+    `${API_BASE}/reports/${encodeURIComponent(reportId)}/transfer-candidates`,
+    { headers: getAuthHeaders() },
+  ));
+  return (json.data ?? []) as TransferCandidate[];
+}
+
+export async function transferReport(
+  reportId: string, toUserId: number,
+): Promise<{ report: SavedReport; transfer: TransferRecord }> {
+  const json = await unwrap(await fetch(`${API_BASE}/reports/${encodeURIComponent(reportId)}/transfer`, {
+    method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ to_user_id: toUserId }),
+  }));
+  return { report: json.data as SavedReport, transfer: json.transfer as TransferRecord };
+}

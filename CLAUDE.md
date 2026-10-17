@@ -2003,6 +2003,11 @@ old constraint, which fails the shared-name test.
     - **The Reports page lists the real saved reports** (`components/Reports/SavedReportsSection`, linked by id; a failed
       load is an error). **The 12 built-in View controls stay "coming soon" until step g**, so each number has one
       implementation.
+    - **Admin transfer (follow-up, 2026-10-17):** on an OWNERLESS report an admin sees **Transfer** next to Delete (only
+      when the served `can_transfer` says so). The picker is step c's `GET /reports/:id/transfer-candidates` (active
+      members of the workspace only); success is shown only after the server moved the report and wrote the
+      `saved_report_transfers` record, and says the report is now private to its new owner. A refusal keeps the dialog
+      open with the server's reason. Transferring to yourself keeps you on the report with owner controls.
     - Tests: `ReportDetailView.test.tsx` (14), `ReportsPage.test.tsx` (+3, and exactly 12 disabled View controls).
       Mutation-tested (12, all killed). Browser check through a real login on `bmi_crm_iso_test` (backend :5002,
       frontend :5174): figures equal to SQL, view-only and ownerless controls, truncation, slug / unknown / not-shared
@@ -2806,6 +2811,21 @@ on the frontend job's `setup-node` step — read it there rather than trusting a
 - Build one vertical slice at a time (e.g. Contacts fully working end-to-end) before moving
   to the next, rather than scaffolding all pages shallowly at once.
 - Check in between stages. Don't run through a multi-item list in a single pass.
+
+### Venkat runs the app — my checks run on SEPARATE ports (decided 2026-10-17)
+- **Venkat's own app runs on :5001 (backend) and :5173 (frontend), started with `./scripts/dev.sh`. Never stop,
+  restart or reuse either without asking first.**
+- Every check of mine runs on separate ports: a backend on **:5002** against `bmi_crm_iso_test`
+  (`DB_NAME=bmi_crm_iso_test PORT=5002 MIGRATIONS_ON_BOOT=check CLIENT_URL=http://localhost:5174`) and the branch's
+  frontend on **:5174** (an allowed CORS origin), with the browser's API calls rerouted from :5001 to :5002. Stop
+  only those processes afterwards, and remove any seeded data and re-count.
+
+### Deliberate breakages (mutation tests) happen ONLY in a separate copy (decided 2026-10-17)
+- **Every deliberate breakage, frontend as well as backend, is made in a separate copy of the repo (a scratch git
+  worktree), never in the branch being committed.** In step e one breakage was not undone and stayed in the
+  committed branch's working tree; only the browser check caught it.
+- **Before every commit, read the diff and confirm it contains only intended changes** (`git diff --stat`, then the
+  diff of each file).
 
 ### One session per worktree
 Two Claude Code sessions ran in this tree at once and it cost real time: one committed the
