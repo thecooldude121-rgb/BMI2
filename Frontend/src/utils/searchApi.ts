@@ -3,7 +3,8 @@
  * THROWS with the server's message on a non-2xx, so the search box can say the
  * search failed instead of showing "No matches" for a request that never ran.
  */
-const API_BASE = 'http://localhost:5001/api/v1';
+
+import { API_BASE } from '../config/backend';
 
 function getAuthHeaders(): HeadersInit {
   const token = localStorage.getItem('authToken');

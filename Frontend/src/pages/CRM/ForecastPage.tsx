@@ -31,8 +31,8 @@ import {
 } from 'lucide-react';
 import { daysFromNow, formatCloseDate } from '../../utils/dateUtils';
 import { formatAmountUSD } from '../../utils/currencyUtils';
+import { API_BASE } from '../../config/backend';
 
-const API_BASE = 'http://localhost:5001/api/v1';
 function authHeaders(): HeadersInit {
   const token = localStorage.getItem('authToken');
   return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };

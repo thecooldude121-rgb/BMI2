@@ -3,7 +3,8 @@
  * server's message on a non-2xx, so a panel can say it failed instead of
  * showing an empty feed that reads as "nothing happened".
  */
-const API_BASE = 'http://localhost:5001/api/v1';
+
+import { API_BASE } from '../config/backend';
 
 function headers(): HeadersInit {
   const token = localStorage.getItem('authToken');

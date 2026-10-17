@@ -1,4 +1,5 @@
 import type { Contact, ContactSource, ContactStatus } from '../types/contact';
+import { API_BASE } from '../config/backend';
 
 /**
  * Contacts API client.
@@ -20,8 +21,6 @@ import type { Contact, ContactSource, ContactStatus } from '../types/contact';
  * warningMessage, and reportsTo. There is no activity, enrichment or deal-link
  * data for contacts. Do not default any of them.
  */
-
-const API_BASE = 'http://localhost:5001/api/v1';
 
 function getAuthHeaders(): HeadersInit {
   const token = localStorage.getItem('authToken');

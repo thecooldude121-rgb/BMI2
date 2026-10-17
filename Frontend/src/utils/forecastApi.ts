@@ -9,7 +9,9 @@
  * `unconverted`, never added. `today` is the viewer's local day
  * (utils/dates.localDay): undated deals count only when it is in the quarter.
  */
-const API_BASE = 'http://localhost:5001/api/v1';
+
+import { API_BASE } from '../config/backend';
+
 const headers = (): HeadersInit => {
   const token = localStorage.getItem('authToken');
   return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };

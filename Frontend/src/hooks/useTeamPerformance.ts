@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchMembers, WorkspaceMember } from '../utils/usersApi';
+import { API_BASE } from '../config/backend';
 
 /**
  * Per-person sales rollups for the Team pages.
@@ -33,8 +34,6 @@ import { fetchMembers, WorkspaceMember } from '../utils/usersApi';
  * than 0% — "nobody has closed anything yet" and "everybody loses" are
  * different facts and must not share a rendering.
  */
-
-const API_BASE = 'http://localhost:5001/api/v1';
 
 function authHeaders(): HeadersInit {
   const token = localStorage.getItem('authToken');

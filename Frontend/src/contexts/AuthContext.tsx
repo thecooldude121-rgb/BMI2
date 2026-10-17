@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react';
 import { parseRateLimit } from '../utils/rateLimitHeader';
+import { API_BASE } from '../config/backend';
 
 /**
  * Real authentication against POST /auth/login.
@@ -25,8 +26,6 @@ import { parseRateLimit } from '../utils/rateLimitHeader';
  * refresh does not sign the user out. A token that the server rejects is
  * discarded rather than kept around looking valid.
  */
-
-const API_BASE = 'http://localhost:5001/api/v1';
 
 /** Shown when the backend cannot be reached. Must never read like a wrong password. */
 export const CANT_REACH_SERVER = "Can't reach the server. Check your internet connection, or try again in a moment.";
