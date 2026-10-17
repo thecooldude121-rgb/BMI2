@@ -70,6 +70,29 @@ export interface BuiltQuery {
 }
 
 /**
+ * The companion query that measures the ROWS BEHIND a result, so a report can
+ * disclose what it was computed from.
+ *
+ * It shares every scoped source and every filter with the result query — see
+ * `mode` on `buildReportQuery`. That sharing is not a convenience: assembling
+ * the sources a second time would be a second place to get tenant scoping
+ * wrong, which is exactly what Phase 0 exists to prevent.
+ */
+export interface BuiltProvenanceQuery {
+  sql: string;
+  params: unknown[];
+  sourceCount: number;
+  /**
+   * False when the base module has no `is_seed` column, so the seeded share
+   * CANNOT be measured. The runner reports null in that case, never 0 — a 0
+   * that means "not measured" is the defect this project keeps removing.
+   */
+  seedMeasurable: boolean;
+  /** One entry per join, so coverage can be reported per relationship. */
+  coverageJoins: { module: string; label: string; alias: string }[];
+}
+
+/**
  * THE ONLY WAY TO NAME A TABLE. Emits a tenant-scoped inline view and pushes the
  * tenant parameter. There is no variant of this that omits the predicate, and
  * nothing else in this file concatenates a table name.
@@ -168,7 +191,28 @@ function filterSql(f: ReportFilter, spec: FieldSpec, params: unknown[]): string 
   }
 }
 
+type BuildMode = 'rows' | 'provenance';
+
 export function buildReportQuery(definition: ReportDefinition, tenantId: string): BuiltQuery {
+  return assemble(definition, tenantId, 'rows') as BuiltQuery;
+}
+
+/**
+ * The provenance companion. Same sources, same filters, different SELECT.
+ *
+ * The `is_test` exclusion moves from WHERE to a FILTER here, which is what lets
+ * the excluded count be REPORTED rather than merely applied: a row hidden by a
+ * policy the user cannot see is worth a number.
+ */
+export function buildProvenanceQuery(
+  definition: ReportDefinition, tenantId: string,
+): BuiltProvenanceQuery {
+  return assemble(definition, tenantId, 'provenance') as BuiltProvenanceQuery;
+}
+
+function assemble(
+  definition: ReportDefinition, tenantId: string, mode: BuildMode,
+): BuiltQuery | BuiltProvenanceQuery {
   if (!definition || typeof definition !== 'object') fail('A report definition is required');
   if (definition.v !== DEFINITION_VERSION) {
     // Never a best-effort parse: a half-understood definition reports a wrong
@@ -278,12 +322,49 @@ export function buildReportQuery(definition: ReportDefinition, tenantId: string)
    * filter them out — a toggle would invite hiding the disclosure and
    * screenshotting the chart.
    */
-  for (const mod of active) {
-    const spec = REPORT_MODULES[mod];
-    if (spec.hasTestFlag) where.push(`${spec.alias}.is_test = false`);
+  const testFlagged = [...active].filter(m => REPORT_MODULES[m].hasTestFlag);
+  if (mode === 'rows') {
+    for (const mod of testFlagged) where.push(`${REPORT_MODULES[mod].alias}.is_test = false`);
   }
+  // In provenance mode the exclusion becomes a FILTER instead (below), so the
+  // number of rows it removed can be REPORTED rather than merely applied.
 
   filters.forEach((f, i) => where.push(filterSql(f, filterSpecs[i], params)));
+
+  if (mode === 'provenance') {
+    const baseAlias = baseSpec.alias;
+    const notTest = testFlagged.length
+      ? testFlagged.map(m => `NOT ${REPORT_MODULES[m].alias}.is_test`).join(' AND ')
+      : 'TRUE';
+    const isTest = testFlagged.length
+      ? testFlagged.map(m => `${REPORT_MODULES[m].alias}.is_test`).join(' OR ')
+      : 'FALSE';
+
+    const counts = [
+      `COUNT(*) FILTER (WHERE ${notTest}) AS rows_matched`,
+      `COUNT(*) FILTER (WHERE ${isTest}) AS excluded_test`,
+    ];
+
+    // Seeded share, only where the base table can actually answer it.
+    const seedMeasurable = baseSpec.hasSeedFlag;
+    counts.push(seedMeasurable
+      ? `COUNT(*) FILTER (WHERE ${notTest} AND ${baseAlias}.is_seed) AS rows_seeded`
+      : `NULL::bigint AS rows_seeded`);
+
+    // Coverage per join: how many surviving base rows actually matched.
+    const coverageJoins = joinKeys.map(k => ({
+      module: k, label: REPORT_MODULES[k].label, alias: REPORT_MODULES[k].alias,
+    }));
+    coverageJoins.forEach((j, i) => {
+      counts.push(`COUNT(*) FILTER (WHERE ${notTest} AND ${j.alias}.id IS NOT NULL) AS join_${i}_matched`);
+    });
+
+    const provSql = `SELECT ${counts.join(',\n       ')}\n${from}`
+      + (where.length ? `\nWHERE ${where.join('\n  AND ')}` : '');
+
+    assertEverySourceIsScoped(provSql, sourceCount);
+    return { sql: provSql, params, sourceCount, seedMeasurable, coverageJoins };
+  }
 
   // ── GROUP BY / ORDER BY / LIMIT ─────────────────────────────────────────
   const groupBy = dimensions.length && metrics.length
