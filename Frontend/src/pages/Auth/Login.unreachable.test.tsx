@@ -2,7 +2,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { AuthProvider } from '../../contexts/AuthContext';
+import fs from 'fs';
+import path from 'path';
+import { AuthProvider, cantReachServerMessage, CANT_REACH_SERVER } from '../../contexts/AuthContext';
 import Login from './Login';
 
 /**
@@ -23,6 +25,8 @@ const signIn = async () => {
 
 const expectCantReach = async () => {
   const msg = await screen.findByText(/Can't reach the server/);
+  // Tests run as a development build, so the start hint is there.
+  expect(msg.textContent).toContain('Is the backend running? Start it with ./scripts/dev.sh.');
   // The error box says only that — nothing about the credentials.
   expect(msg.textContent).not.toMatch(/invalid|incorrect|wrong|password/i);
   expect(screen.queryByText(/invalid email|incorrect|wrong password/i)).toBeNull();
@@ -47,5 +51,20 @@ describe('Login when the backend cannot be reached', () => {
     await signIn();
     expect(await screen.findByText('Invalid email or password')).toBeInTheDocument();
     expect(screen.queryByText(/Can't reach the server/)).toBeNull();
+  });
+});
+
+describe('the start hint is for development builds only', () => {
+  it('a production build shows the plain message, with no mention of scripts', () => {
+    expect(cantReachServerMessage(false)).toBe(CANT_REACH_SERVER);
+    expect(cantReachServerMessage(false)).not.toMatch(/dev\.sh|backend running/);
+  });
+  it('a development build adds the hint after the plain message', () => {
+    expect(cantReachServerMessage(true)).toBe(`${CANT_REACH_SERVER} Is the backend running? Start it with ./scripts/dev.sh.`);
+  });
+  it('the hint text itself is a compile-time DEV constant, so a production bundle does not contain it', () => {
+    const src = fs.readFileSync(path.join(__dirname, '../../contexts/AuthContext.tsx'), 'utf8');
+    expect(src).toMatch(/const DEV_START_HINT = import\.meta\.env\.DEV \? '/);
+    expect(src.match(/scripts\/dev\.sh/g)).toHaveLength(1);
   });
 });

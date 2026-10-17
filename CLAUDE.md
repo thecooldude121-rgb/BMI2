@@ -2506,7 +2506,8 @@ like every other FK here) or stays a slug with a composite FK to a unique
   ts-node, not ts-node-dev, for the reason above) and frontend together; Ctrl-C stops both; it refuses a busy port.
   A backend started by a Claude session is detached (survives that session) but not a reboot or logout.
 - **The login page says "Can't reach the server…" when the backend is down** (a failed fetch, or a 502/503/504 with
-  no message) — never anything that reads like a wrong password. `Login.unreachable.test.tsx` drives the real
+  no message) — never anything that reads like a wrong password. Development builds add "Is the backend running? Start it with
+  ./scripts/dev.sh." (a compile-time `import.meta.env.DEV` constant — absent from a production bundle, checked by grep). `Login.unreachable.test.tsx` drives the real
   AuthProvider; mutation-tested.
 - **Password reset is NOT built.** The "Forgot password?" link goes nowhere. It needs, in
   dependency order: transactional email delivery (provider, sender domain, SPF/DKIM) — this
