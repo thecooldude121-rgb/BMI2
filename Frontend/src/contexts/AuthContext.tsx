@@ -30,6 +30,15 @@ const API_BASE = 'http://localhost:5001/api/v1';
 
 /** Shown when the backend cannot be reached. Must never read like a wrong password. */
 export const CANT_REACH_SERVER = "Can't reach the server. Check your internet connection, or try again in a moment.";
+/**
+ * Development builds only: locally the usual cause is that the backend is not running.
+ * `import.meta.env.DEV` is replaced at build time, so a production bundle carries no
+ * trace of this text (checked by grepping the build output).
+ */
+const DEV_START_HINT = import.meta.env.DEV ? 'Is the backend running? Start it with ./scripts/dev.sh.' : '';
+export function cantReachServerMessage(dev: boolean = import.meta.env.DEV): string {
+  return dev && DEV_START_HINT ? `${CANT_REACH_SERVER} ${DEV_START_HINT}` : CANT_REACH_SERVER;
+}
 const UNREACHABLE_STATUSES = new Set([502, 503, 504]);
 /** The single key the whole app uses for the session token. */
 export const TOKEN_KEY = 'authToken';
@@ -195,7 +204,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // A gateway answering for a backend that is down (502/503/504) is the same
       // failure as no answer at all — never a refused password.
       if (UNREACHABLE_STATUSES.has(res.status) && !json.message) {
-        return { ok: false, message: CANT_REACH_SERVER };
+        return { ok: false, message: cantReachServerMessage() };
       }
 
       if (!res.ok || !json.token) {
@@ -214,7 +223,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return { ok: true };
     } catch {
       // A network failure is not a wrong password, and must not be reported as one.
-      return { ok: false, message: CANT_REACH_SERVER };
+      return { ok: false, message: cantReachServerMessage() };
     }
   }, []);
 
