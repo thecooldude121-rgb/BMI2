@@ -32,6 +32,7 @@ const OWNER = { can_view: true, can_edit: true, can_delete: true, can_share: tru
 const VIEWER = { can_view: true, can_edit: false, can_delete: false, can_share: false, can_transfer: false };
 
 const REPORT = {
+  status: 'saved',
   id: ID, name: 'Won value by source and stage', description: 'Stored description', category: 'Sales',
   definition: { v: 1, base: 'deals', joins: ['companies'], filters: [{ field: 'deals.source', op: 'ne', value: 'x' }] },
   owner_id: 5, owner_name: 'Dee Admin', created_at: '', updated_at: '', ownerless: false, abilities: OWNER,
@@ -66,6 +67,7 @@ const show = (url = `/crm/reports/${ID}`) => render(
     <Routes>
       <Route path="/crm/reports/:reportId" element={<><ReportDetailView /><Where /></>} />
       <Route path="/crm/reports" element={<><p>Reports list</p><Where /></>} />
+      <Route path="/crm/custom-report-builder" element={<Where />} />
     </Routes>
   </MemoryRouter>,
 );
@@ -169,12 +171,22 @@ describe('controls follow the served abilities', () => {
     expect(screen.getByRole('button', { name: /Schedule · Coming soon/ })).toBeDisabled();
   });
 
-  it('the owner gets Share and Delete; Edit is "Coming soon" until the builder', async () => {
+  it('the owner gets Share, Delete, and Edit — which opens this report in the builder (step f)', async () => {
     show();
     await screen.findByTestId('report-results');
     expect(screen.getByRole('button', { name: /^Share$/ })).toBeEnabled();
     expect(screen.getByRole('button', { name: /^Delete$/ })).toBeEnabled();
-    expect(screen.getByRole('button', { name: /Edit · Coming soon/ })).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: /^Edit$/ }));
+    expect(path).toBe('/crm/custom-report-builder');
+  });
+
+  it('a DRAFT says so: only you can see it and it cannot be shared yet (no Share control)', async () => {
+    api.fetchReport.mockResolvedValue({ ...REPORT, status: 'draft', abilities: { ...OWNER, can_share: false } });
+    show();
+    await screen.findByTestId('report-results');
+    expect(screen.getByText('This is a draft')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 }).previousElementSibling?.textContent ?? '').toMatch(/Draft/);
+    expect(screen.queryByRole('button', { name: /^Share$/ })).toBeNull();
   });
 });
 

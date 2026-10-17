@@ -39,12 +39,12 @@
 export function canViewPredicate(alias: string, userParam: number): string {
   return `(
     ${alias}.owner_id = $${userParam}
-    OR EXISTS (
+    OR (${alias}.status = 'saved' AND EXISTS (
       SELECT 1 FROM saved_report_grants g
        WHERE g.report_id = ${alias}.id
          AND g.tenant_id = ${alias}.tenant_id
          AND g.user_id   = $${userParam}
-    )
+    ))
   )`;
 }
 
@@ -58,13 +58,13 @@ export function canViewPredicate(alias: string, userParam: number): string {
 export function canEditPredicate(alias: string, userParam: number): string {
   return `(
     ${alias}.owner_id = $${userParam}
-    OR EXISTS (
+    OR (${alias}.status = 'saved' AND EXISTS (
       SELECT 1 FROM saved_report_grants g
        WHERE g.report_id = ${alias}.id
          AND g.tenant_id = ${alias}.tenant_id
          AND g.user_id   = $${userParam}
          AND g.level     = 'edit'
-    )
+    ))
   )`;
 }
 
@@ -112,7 +112,9 @@ export function isOwnerlessPredicate(alias: string): string {
  * from the request body.
  */
 export function adminOwnerlessPredicate(alias: string, adminParam: number): string {
-  return `($${adminParam}::boolean AND ${isOwnerlessPredicate(alias)})`;
+  // A DRAFT is private to its owner (072), so an ownerless draft is not an
+  // admin's to see — not even to delete or transfer.
+  return `($${adminParam}::boolean AND ${alias}.status = 'saved' AND ${isOwnerlessPredicate(alias)})`;
 }
 
 /** View: the ordinary rule, or an admin looking at an ownerless report. */
@@ -146,16 +148,19 @@ export interface ReportAbilities {
  * permission rule had already drifted in this codebase before anyone noticed.
  */
 export function abilitiesFor(
-  row: { owner_id: number | null; ownerless: boolean },
+  row: { owner_id: number | null; ownerless: boolean; status: 'draft' | 'saved' },
   grantLevel: GrantLevel | null, userId: number, isAdmin: boolean,
 ): ReportAbilities {
   const isOwner = row.owner_id !== null && Number(row.owner_id) === Number(userId);
-  const adminOverOwnerless = isAdmin && row.ownerless;
+  // A draft (072) is the owner's alone: grants and admin rights count only on a saved report.
+  const saved = row.status === 'saved';
+  const grant = saved ? grantLevel : null;
+  const adminOverOwnerless = isAdmin && saved && row.ownerless;
   return {
-    can_view:     isOwner || grantLevel !== null || adminOverOwnerless,
-    can_edit:     isOwner || grantLevel === 'edit',
+    can_view:     isOwner || grant !== null || adminOverOwnerless,
+    can_edit:     isOwner || grant === 'edit',
     can_delete:   isOwner || adminOverOwnerless,
-    can_share:    isOwner,
+    can_share:    isOwner && saved,
     can_transfer: adminOverOwnerless,
   };
 }

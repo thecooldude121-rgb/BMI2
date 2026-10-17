@@ -269,7 +269,7 @@ const SavedReportDetail: React.FC<{ reportId: string }> = ({ reportId }) => {
       <Breadcrumb current={report.name} />
 
       <PageHeader
-        eyebrow={report.category ? `Saved report · ${report.category}` : 'Saved report'}
+        eyebrow={`${report.status === 'draft' ? 'Draft' : 'Saved report'}${report.category ? ` · ${report.category}` : ''}`}
         title={report.name}
         description={report.description ?? undefined}
         actions={(
@@ -285,8 +285,8 @@ const SavedReportDetail: React.FC<{ reportId: string }> = ({ reportId }) => {
               </Button>
             )}
             {a.can_edit && (
-              <Button variant="secondary" disabled title="Editing arrives with the report builder">
-                <Pencil className="h-4 w-4" aria-hidden="true" /> Edit · Coming soon
+              <Button variant="secondary" onClick={() => navigate(`/crm/custom-report-builder?id=${encodeURIComponent(reportId)}`)}>
+                <Pencil className="h-4 w-4" aria-hidden="true" /> Edit
               </Button>
             )}
             {a.can_transfer && (
@@ -308,6 +308,12 @@ const SavedReportDetail: React.FC<{ reportId: string }> = ({ reportId }) => {
           </>
         )}
       />
+
+      {report.status === 'draft' && (
+        <Alert tone="info" title="This is a draft">
+          Only you can see it, and it can&rsquo;t be shared yet. Open it in the builder and choose Save report when it is ready.
+        </Alert>
+      )}
 
       {/* Meta line: owner, sharing (from the real grants), when the figures ran. */}
       <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted" data-testid="report-meta">
@@ -339,7 +345,7 @@ const SavedReportDetail: React.FC<{ reportId: string }> = ({ reportId }) => {
             <Alert tone="warning" title="This report can no longer run">
               A field or module it uses is no longer available, so nothing is shown rather than a partial result.
               {' '}{runError.message}{' '}
-              {a.can_edit ? 'Fixing the definition needs the report builder, which is not built yet.' : 'Ask its owner to update it.'}
+              {a.can_edit ? 'Open it in the builder (Edit) to fix the definition.' : 'Ask its owner to update it.'}
             </Alert>
           )}
           {runError.kind === 'unavailable' && (
@@ -424,7 +430,7 @@ const SavedReportDetail: React.FC<{ reportId: string }> = ({ reportId }) => {
         <div className="text-sm">
           <p className="font-semibold text-ink">Not available yet</p>
           <p className="text-ink-muted">
-            Editing needs the report builder, and export and scheduling are not built yet, so those buttons are disabled.
+            Export and scheduling are not built yet, so those buttons are disabled.
             The figures above are calculated from your workspace each time the report runs.
           </p>
         </div>

@@ -5,6 +5,9 @@ import { requireTenantId } from '../middleware/tenant';
 import { foreignIdsInTenant } from '../utils/tenantScope';
 import { buildReportQuery, ReportDefinitionError } from '../services/reports/queryBuilder';
 import { REPORT_MODULES, REPORT_FIELDS } from '../services/reports/registry';
+import {
+  AGGREGATIONS, OPERATORS, AGGREGATION_NEEDS_FIELD, OPERATOR_ARITY, OPERATOR_FIELD_TYPES,
+} from '../services/reports/types';
 import { runReport, ReportTimeout } from '../services/reports/runner';
 import { ReportsPoolUnavailable } from '../config/reportsDatabase';
 import {
@@ -46,7 +49,7 @@ const DISPLAY_NAME = (a: string) =>
 
 const SELECT_COLUMNS = `
   r.id, r.name, r.description, r.category, r.definition,
-  r.owner_id, r.created_at, r.updated_at,
+  r.owner_id, r.status, r.created_at, r.updated_at,
   NULLIF(btrim(COALESCE(o.first_name,'') || ' ' || COALESCE(o.last_name,'')), '') AS owner_name,
   (SELECT g.level FROM saved_report_grants g
     WHERE g.report_id = r.id AND g.tenant_id = r.tenant_id AND g.user_id = $2) AS my_grant,
@@ -75,9 +78,14 @@ const shape = (row: Record<string, unknown>, userId: number, isAdmin: boolean) =
   created_at: row.created_at,
   updated_at: row.updated_at,
   ownerless: row.ownerless === true,
+  status: row.status,
   // Served, not re-derived client-side. Same arrangement as assignable_roles.
   abilities: abilitiesFor(
-    { owner_id: row.owner_id === null ? null : Number(row.owner_id), ownerless: row.ownerless === true },
+    {
+      owner_id: row.owner_id === null ? null : Number(row.owner_id),
+      ownerless: row.ownerless === true,
+      status: row.status as 'draft' | 'saved',
+    },
     (row.my_grant as GrantLevel | null) ?? null,
     userId,
     isAdmin,
@@ -120,6 +128,15 @@ export const listReports = async (req: AuthRequest, res: Response, next: NextFun
         key, label: f.label, type: f.type, module: f.module, aggregatable: !!f.aggregatable,
       })),
       grant_levels: GRANT_LEVELS,
+      // Served for the same reason modules and fields are: the builder must not
+      // keep its own copy of a vocabulary this server enforces. `arity` and
+      // `needs_field` travel with them so the form knows how many value inputs
+      // to show without re-deriving the rule.
+      aggregations: AGGREGATIONS.map(id => ({ id, needs_field: AGGREGATION_NEEDS_FIELD[id] })),
+      operators: OPERATORS.map(id => ({
+        id, arity: OPERATOR_ARITY[id], applies_to: OPERATOR_FIELD_TYPES[id],
+      })),
+      statuses: REPORT_STATUSES,
     });
   } catch (error) { next(error); }
 };
@@ -145,20 +162,27 @@ export const createReport = async (req: AuthRequest, res: Response, next: NextFu
     const tenantId = requireTenantId(req);
     const userId = Number(req.user?.id);
     const { name, description, category, definition } = req.body ?? {};
+    const status = req.body?.status ?? 'saved';
+    if (!REPORT_STATUSES.includes(status)) {
+      res.status(400).json({ success: false, message: `status must be one of: ${REPORT_STATUSES.join(', ')}` });
+      return;
+    }
 
     if (!name || !String(name).trim()) {
       res.status(400).json({ success: false, message: 'name is required' });
       return;
     }
+    const tooLong = textLimitError(req.body);
+    if (tooLong) { res.status(400).json({ success: false, message: tooLong }); return; }
     const bad = definitionError(definition, tenantId);
     if (bad) { res.status(400).json({ success: false, message: bad }); return; }
 
     const inserted = await pool.query(
-      `INSERT INTO saved_reports (tenant_id, name, description, category, definition, owner_id)
-       VALUES ($1, $2, $3, $4, $5::jsonb, $6)
+      `INSERT INTO saved_reports (tenant_id, name, description, category, definition, owner_id, status)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
        RETURNING id`,
       [tenantId, String(name).trim(), description || null, category || null,
-       JSON.stringify(definition), userId],
+       JSON.stringify(definition), userId, status],
     );
 
     const created = await pool.query(
@@ -175,7 +199,28 @@ export const createReport = async (req: AuthRequest, res: Response, next: NextFu
   }
 };
 
-const EDITABLE = ['name', 'description', 'category', 'definition'] as const;
+const EDITABLE = ['name', 'description', 'category', 'definition', 'status'] as const;
+
+/**
+ * DRAFTS (072). A draft is private to its owner; `status` moves one way only,
+ * draft -> saved. A saved report never goes back to draft: it may already be
+ * shared, and drafting it would hide it from those people without telling them.
+ */
+const REPORT_STATUSES: readonly string[] = ['draft', 'saved'];
+
+/**
+ * The columns' own limits (name varchar(255), category varchar(100)), checked
+ * here so an over-long value is a 400 naming the field instead of Postgres's
+ * 22001 surfacing as a masked 500. The builder shows the same limits.
+ */
+const TEXT_LIMITS = { name: 255, category: 100 } as const;
+function textLimitError(body: Record<string, unknown>): string | null {
+  for (const [k, max] of Object.entries(TEXT_LIMITS)) {
+    const v = body[k];
+    if (typeof v === 'string' && v.trim().length > max) return `${k} must be at most ${max} characters`;
+  }
+  return null;
+}
 
 /** PATCH /api/v1/reports/:id — owner, or a grant at level 'edit'. */
 export const updateReport = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
@@ -197,6 +242,14 @@ export const updateReport = async (req: AuthRequest, res: Response, next: NextFu
       const bad = definitionError(body.definition, tenantId);
       if (bad) { res.status(400).json({ success: false, message: bad }); return; }
     }
+    const tooLong = textLimitError(body);
+    if (tooLong) { res.status(400).json({ success: false, message: tooLong }); return; }
+    if (body.status !== undefined && !REPORT_STATUSES.includes(body.status)) {
+      res.status(400).json({ success: false, message: `status must be one of: ${REPORT_STATUSES.join(', ')}` });
+      return;
+    }
+    // draft -> saved only: the predicate below matches no saved row when 'draft' is asked for.
+    const noRedraft = body.status === 'draft' ? ` AND r.status = 'draft'` : '';
 
     /*
      * The permission predicate is IN THE UPDATE. A caller without edit rights
@@ -207,11 +260,25 @@ export const updateReport = async (req: AuthRequest, res: Response, next: NextFu
     const values = fields.map(f => (f === 'definition' ? JSON.stringify(body[f]) : body[f]));
     const updated = await pool.query(
       `UPDATE saved_reports r SET ${sets}, updated_at = NOW()
-        WHERE r.tenant_id = $1 AND r.id = $3 AND ${canEditPredicate('r', 2)}
+        WHERE r.tenant_id = $1 AND r.id = $3 AND ${canEditPredicate('r', 2)}${noRedraft}
         RETURNING r.id`,
       [tenantId, userId, req.params.id, ...values],
     );
-    if (!updated.rows[0]) { res.status(404).json({ success: false, message: 'Report not found' }); return; }
+    if (!updated.rows[0]) {
+      if (noRedraft) {
+        // Tell an editor of a SAVED report why, without telling anyone else it exists.
+        const visible = await pool.query(
+          `SELECT 1 FROM saved_reports r WHERE r.tenant_id = $1 AND r.id = $3 AND ${canEditPredicate('r', 2)}`,
+          [tenantId, userId, req.params.id],
+        );
+        if (visible.rows[0]) {
+          res.status(409).json({ success: false, message: 'A saved report cannot go back to being a draft' });
+          return;
+        }
+      }
+      res.status(404).json({ success: false, message: 'Report not found' });
+      return;
+    }
 
     const row = await pool.query(
       `SELECT ${SELECT_COLUMNS} ${FROM_JOINS} WHERE r.id = $3 AND r.tenant_id = $1`,
@@ -302,11 +369,16 @@ export const setGrant = async (req: AuthRequest, res: Response, next: NextFuncti
     if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
 
     const owns = await pool.query(
-      `SELECT r.id FROM saved_reports r
+      `SELECT r.id, r.status FROM saved_reports r
         WHERE r.tenant_id = $1 AND r.id = $3 AND ${isOwnerPredicate('r', 2)}`,
       [tenantId, userId, req.params.id],
     );
     if (!owns.rows[0]) { res.status(404).json({ success: false, message: 'Report not found' }); return; }
+    if (owns.rows[0].status === 'draft') {
+      // Only the owner reaches this line, so naming the reason discloses nothing.
+      res.status(409).json({ success: false, message: 'Save this report before sharing it — a draft is private to you' });
+      return;
+    }
 
     if (grantee === userId) {
       // The owner already has everything; a self-grant would be a row that
@@ -358,7 +430,7 @@ export const listTransferCandidates = async (req: AuthRequest, res: Response, ne
     const tenantId = requireTenantId(req);
     const report = await pool.query(
       `SELECT r.id FROM saved_reports r
-        WHERE r.tenant_id = $1 AND r.id = $2 AND $3::boolean AND ${isOwnerlessPredicate('r')}`,
+        WHERE r.tenant_id = $1 AND r.id = $2 AND $3::boolean AND r.status = 'saved' AND ${isOwnerlessPredicate('r')}`,
       [tenantId, req.params.id, isAdminCaller(req)],
     );
     if (!report.rows[0]) { res.status(404).json({ success: false, message: 'Report not found' }); return; }
@@ -406,7 +478,7 @@ export const transferReport = async (req: AuthRequest, res: Response, next: Next
     if (!report) { await client.query('ROLLBACK'); notFound(); return; }
 
     const ownerless = await client.query(
-      `SELECT ${isOwnerlessPredicate('r')} AS ownerless FROM saved_reports r WHERE r.tenant_id = $1 AND r.id = $2`,
+      `SELECT (r.status = 'saved' AND ${isOwnerlessPredicate('r')}) AS ownerless FROM saved_reports r WHERE r.tenant_id = $1 AND r.id = $2`,
       [tenantId, report.id],
     );
     // An owned report is absent to an admin, exactly as on every other route.

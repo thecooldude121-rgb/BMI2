@@ -3,7 +3,10 @@
  * what Report Detail needs; the builder's vocabularies arrive with step f).
  *
  *   GET    /reports                 list (the caller's own, shared, and — for an
- *                                   admin — ownerless reports)
+ *                                   admin — ownerless reports) + THE SERVED REGISTRY
+ *   POST   /reports                 create (status 'draft' or 'saved')
+ *   PATCH  /reports/:id             update (owner or an edit grant); draft -> saved only
+ *   POST   /reports/run             run a definition WITHOUT saving it (builder preview)
  *   GET    /reports/:id             one
  *   DELETE /reports/:id             owner, or an admin on an ownerless report
  *   GET    /reports/:id/run         run a saved one, with provenance
@@ -43,16 +46,34 @@ async function unwrap(res: Response): Promise<Record<string, unknown>> {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const isReportId = (s: string | undefined): s is string => !!s && UUID.test(s);
 
+export type Aggregation = 'count' | 'count_distinct' | 'sum' | 'avg' | 'min' | 'max';
+export type Operator =
+  | 'eq' | 'ne' | 'in' | 'not_in' | 'gt' | 'gte' | 'lt' | 'lte'
+  | 'between' | 'is_null' | 'is_not_null' | 'contains';
+
 export interface ReportDefinition {
   v: number;
   base: string;
   joins?: string[];
   dimensions?: { field: string }[];
-  metrics?: { agg: string; field?: string; label?: string }[];
-  filters?: { field: string; op: string; value?: unknown }[];
+  metrics?: { agg: Aggregation | string; field?: string; label?: string }[];
+  filters?: { field: string; op: Operator | string; value?: unknown }[];
+  /** `by` is a breakdown's field key, or `metric:N` for the Nth measure. */
   sort?: { by: string; dir: 'asc' | 'desc' }[];
   limit?: number;
 }
+
+/** Must match DEFINITION_VERSION on the server; a mismatch is refused there. */
+export const DEFINITION_VERSION = 1;
+
+/** The server caps every result at this many rows (MAX_ROWS). */
+export const MAX_ROWS = 5000;
+
+/** The columns' own limits; the server answers 400 past them. */
+export const NAME_MAX = 255;
+export const CATEGORY_MAX = 100;
+
+export type ReportStatus = 'draft' | 'saved';
 
 /** Served by the server (`abilitiesFor`); the client never re-derives them. */
 export interface ReportAbilities {
@@ -75,12 +96,95 @@ export interface SavedReport {
   updated_at: string;
   /** No owner, or the owner is deactivated (step c). */
   ownerless: boolean;
+  /** A draft is private to its owner and cannot be shared until saved (072). */
+  status: ReportStatus;
   abilities: ReportAbilities;
 }
 
 export async function fetchReports(): Promise<SavedReport[]> {
   const json = await unwrap(await fetch(`${API_BASE}/reports`, { headers: getAuthHeaders() }));
   return (json.data ?? []) as SavedReport[];
+}
+
+// ── The served registry (what the builder may offer) ──────────────────────
+//
+// Modules, fields, aggregations and operators all come from GET /reports. The
+// builder keeps NO vocabulary of its own: the old page offered "Revenue" (not a
+// module), "Deal Health" (no such column) and an "HRMS Connection" grouping (a
+// separate product). Absent means EMPTY, never a local fallback.
+
+export interface RegistryModule { key: string; label: string; joins: string[] }
+export interface RegistryField {
+  key: string; label: string; type: string; module: string; aggregatable: boolean;
+}
+export type OperatorArity = 0 | 1 | 2 | 'many';
+export interface AggregationSpec { id: Aggregation; needs_field: boolean }
+export interface OperatorSpec {
+  id: Operator;
+  arity: OperatorArity;
+  /** Field types this operator applies to; `null` means any type. */
+  applies_to: string[] | null;
+}
+
+export interface ReportRegistry {
+  reports: SavedReport[];
+  modules: RegistryModule[];
+  fields: RegistryField[];
+  aggregations: AggregationSpec[];
+  operators: OperatorSpec[];
+}
+
+export async function fetchRegistry(): Promise<ReportRegistry> {
+  const json = await unwrap(await fetch(`${API_BASE}/reports`, { headers: getAuthHeaders() }));
+  return {
+    reports: (json.data ?? []) as SavedReport[],
+    modules: (json.modules ?? []) as RegistryModule[],
+    fields: (json.fields ?? []) as RegistryField[],
+    aggregations: (json.aggregations ?? []) as AggregationSpec[],
+    operators: (json.operators ?? []) as OperatorSpec[],
+  };
+}
+
+/** An operator with no declared restriction applies to every field type. */
+export const operatorAppliesTo = (op: OperatorSpec, fieldType: string): boolean =>
+  op.applies_to === null || op.applies_to.includes(fieldType);
+
+/**
+ * ONLY THE DISPLAY TEXT IS LOCAL. Which aggregations and operators exist, and
+ * how many values each takes, is served. An id with no label still renders,
+ * labelled with the id, rather than being dropped or mislabelled.
+ */
+const AGGREGATION_LABELS: Record<string, string> = {
+  count: 'Count of rows', count_distinct: 'Count distinct', sum: 'Sum', avg: 'Average', min: 'Minimum', max: 'Maximum',
+};
+const OPERATOR_LABELS: Record<string, string> = {
+  eq: 'is', ne: 'is not', contains: 'contains', gt: 'is more than', gte: 'is at least',
+  lt: 'is less than', lte: 'is at most', between: 'is between', in: 'is any of', not_in: 'is none of',
+  is_null: 'is empty', is_not_null: 'is not empty',
+};
+export const aggregationLabel = (id: string): string => AGGREGATION_LABELS[id] ?? id;
+export const operatorLabel = (id: string): string => OPERATOR_LABELS[id] ?? id;
+
+export interface SaveReportBody {
+  name: string;
+  description?: string | null;
+  category?: string | null;
+  definition: ReportDefinition;
+  status?: ReportStatus;
+}
+
+export async function createReport(body: SaveReportBody): Promise<SavedReport> {
+  const json = await unwrap(await fetch(`${API_BASE}/reports`, {
+    method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(body),
+  }));
+  return json.data as SavedReport;
+}
+
+export async function updateReport(id: string, body: Partial<SaveReportBody>): Promise<SavedReport> {
+  const json = await unwrap(await fetch(`${API_BASE}/reports/${encodeURIComponent(id)}`, {
+    method: 'PATCH', headers: getAuthHeaders(), body: JSON.stringify(body),
+  }));
+  return json.data as SavedReport;
 }
 
 export async function fetchReport(id: string): Promise<SavedReport> {
@@ -121,6 +225,14 @@ export interface ReportRun {
   provenance: Provenance;
   ms: number;
   report?: { id: string; name: string };
+}
+
+/** Run a definition without saving it — the builder's preview. 400 for a bad definition. */
+export async function runDefinition(definition: ReportDefinition): Promise<ReportRun> {
+  const json = await unwrap(await fetch(`${API_BASE}/reports/run`, {
+    method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ definition }),
+  }));
+  return json as unknown as ReportRun;
 }
 
 /**

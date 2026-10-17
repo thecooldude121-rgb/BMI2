@@ -36,6 +36,58 @@ export const OPERATORS = [
 ] as const;
 export type Operator = (typeof OPERATORS)[number];
 
+/**
+ * HOW MANY VALUES EACH OPERATOR TAKES, and WHICH AGGREGATIONS NEED A FIELD.
+ *
+ * These are declared here and SERVED to the client, rather than the client
+ * keeping its own copy — the same call made for `assignable_roles`, and for the
+ * same recorded reason: `invitableRolesFor()` was exactly such a mirror, and it
+ * had already drifted (it omitted `hr`, so the invite form could not invite an
+ * HR user at all, silently).
+ *
+ * The enforcement still lives in the builder's `filterSql` switch, which is
+ * where it belongs — this is a DESCRIPTION of it, not a second implementation.
+ * A description can disagree with what it describes, so
+ * `reportQueryBuilder.test.ts` drives every operator at its declared arity and
+ * asserts the builder agrees, which is what stops these two drifting apart.
+ */
+export type OperatorArity = 0 | 1 | 2 | 'many';
+
+export const OPERATOR_ARITY: Record<Operator, OperatorArity> = {
+  eq: 1, ne: 1, contains: 1,
+  gt: 1, gte: 1, lt: 1, lte: 1,
+  between: 2,
+  in: 'many', not_in: 'many',
+  is_null: 0, is_not_null: 0,
+};
+
+/**
+ * WHICH FIELD TYPES EACH OPERATOR APPLIES TO. `null` means any type.
+ *
+ * Only `contains` is restricted today (it compiles to ILIKE, so a number has no
+ * meaningful answer), and the builder enforces that. It is described here for
+ * the same reason as the arity: without it the filter form offers "contains" on
+ * a currency field, the user picks it, and the server answers 400 for a choice
+ * the UI presented as valid — a door the server will not open, which this
+ * project treats as the same class of defect as a success toast over an
+ * unchanged database.
+ */
+export const OPERATOR_FIELD_TYPES: Record<Operator, string[] | null> = {
+  eq: null, ne: null,
+  gt: null, gte: null, lt: null, lte: null,
+  between: null,
+  in: null, not_in: null,
+  is_null: null, is_not_null: null,
+  contains: ['string'],
+};
+
+/** `count` counts rows; every other aggregation needs something to aggregate. */
+export const AGGREGATION_NEEDS_FIELD: Record<Aggregation, boolean> = {
+  count: false,
+  count_distinct: true,
+  sum: true, avg: true, min: true, max: true,
+};
+
 export type SortDirection = 'asc' | 'desc';
 
 export interface ReportDimension {
