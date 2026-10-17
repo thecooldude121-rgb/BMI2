@@ -3,6 +3,7 @@ import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { BarChart3, TrendingUp, Users, DollarSign, Calendar, Target, Activity, FileText, Download, ChevronRight, ChevronDown, ChevronUp, Star, Clock, Award, Building2, AlertCircle, Eye, Settings, MoreVertical, Plus, RefreshCw, Home, Edit } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
+import SavedReportsSection from '../../components/Reports/SavedReportsSection';
 import {
   reportsIn, usd, type ReportSection, type ReportData, type ReportDef,
 } from './reportDefinitions';
@@ -369,9 +370,11 @@ const ReportsPage: React.FC = () => {
     navigate('/crm/custom-report-builder');
   };
 
-  // No "view report" navigation: /crm/reports/:slug rendered sample figures
-  // under a heading built from the URL. Until Report Detail by id lands (reports
-  // replay step e) the cards' View controls are disabled "coming soon".
+  // No "view report" navigation from the built-in cards: /crm/reports/:slug
+  // rendered sample figures under a heading built from the URL. Report Detail
+  // by id exists (step e) for SAVED reports, listed in SavedReportsSection; the
+  // built-in cards' View controls stay "coming soon" until step g, so each of
+  // their numbers has ONE implementation (5b's server totals), not two.
 
 
 
@@ -981,6 +984,11 @@ const ReportsPage: React.FC = () => {
           happen either.
         */}
 
+        {/* The workspace's real saved reports, linked by id to Report Detail
+            (reports replay step e) — above the built-in cards, whose View
+            controls stay "coming soon" until step g. */}
+        <SavedReportsSection />
+
         {/* Sales Performance Section */}
         {true && (
         <>
@@ -1428,8 +1436,9 @@ const ReportCard: React.FC<ReportCardProps> = ({
         real.
 
         `View` is disabled "coming soon" (2026-10-15): /crm/reports/:slug showed
-        sample figures under a heading built from the URL. Report Detail by id
-        replaces it (reports replay step e). `Edit` stays because it navigates
+        sample figures under a heading built from the URL. It stays disabled until
+        step g (canned reports reusing these same server totals), so a built-in
+        number never has a second implementation behind a detail page. `Edit` stays because it navigates
         to the custom-report builder.
       */}
       <div className="flex items-center gap-2 mt-2 flex-shrink-0">
