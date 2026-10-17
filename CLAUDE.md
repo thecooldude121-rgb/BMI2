@@ -2012,8 +2012,34 @@ old constraint, which fails the shared-name test.
       Mutation-tested (12, all killed). Browser check through a real login on `bmi_crm_iso_test` (backend :5002,
       frontend :5174): figures equal to SQL, view-only and ownerless controls, truncation, slug / unknown / not-shared
       404s, a grant removed and a report deleted, both confirmed in Postgres; seed removed and re-counted.
-  - **f.** The builder. **Once it is real, label it "Available"** — even though the Figma card
-    still says "Not available yet" (behaviour beats the frame here).
+  - **f.** The builder. **BUILT 2026-10-17** (P3 Phase 4, rebuilt on main's shell and tokens on the Figma "Custom report
+    builder" frame 75:13300). `/crm/custom-report-builder` (new) and `?id=` (edit; Report Detail's Edit opens it).
+    - **Everything it offers is served** by `GET /reports`: modules, fields, and now aggregations (`needs_field`) and
+      operators (`arity`, `applies_to`), so the filter form shows the right number of value inputs and offers `contains`
+      only on text fields. A registry that fails to load, or serves no modules, offers nothing — never a local list.
+    - **The preview is a real run** (`POST /reports/run`) with the step e provenance panel; any edit clears it.
+    - **DRAFTS ARE A REAL STATE — migration 072, decided by Venkat 2026-10-17 ("Real draft state").**
+      `saved_reports.status` draft | saved (default saved). A draft is private to its owner: a grant counts only on a
+      saved report (in the predicates, so even a stray grant row on a draft gives nothing), an admin has no rights over an
+      ownerless DRAFT (no view, delete or transfer), and sharing a draft is a 409 to its owner. Status moves one way:
+      draft -> saved; asking for saved -> draft is a 409 to someone who may edit it, 404 to anyone else.
+      **Consequence to know: an ownerless draft (its owner deactivated or deleted) is visible to nobody and can only be
+      removed in the database** — the rule as decided; revisit if it ever matters.
+    - **"Save draft" -> "Saved as draft", "Save" -> "Saved"**, each only after the 2xx; a refusal keeps the input.
+      Editing a saved report offers no "Save draft". Report Detail and the Saved reports list show a Draft badge.
+    - **Labelled "Available"** on the Reports page's Custom section (the Figma card still says "Not available yet" —
+      behaviour wins); the empty Saved reports state offers "Build a report".
+    - Not built, shown as "Coming soon": report types other than Table, custom formulas, preset layouts (canned reports,
+      step g), scheduled delivery. Sharing is on the report's page once saved.
+    - Also: `name` > 255 or `category` > 100 characters is a 400 naming the field (it was Postgres's 22001, a masked 500).
+    - Tests: `roundTrip.savedReportsDrafts` (8), Phase 4's vocabulary tests in `roundTrip.savedReports` (+1) and
+      `reportQueryBuilder`; `CustomReportBuilder.test.tsx` (17), Report Detail / Reports page (+2 new, 2 rewritten; the old builder
+      "coming soon" test removed). 20 mutations killed, in a
+      separate worktree (one survived first and exposed a real bug: an empty module list showed "Loading" forever).
+      The typecheck caught icon-only remove buttons drawn with no icon; fixed and tested. Typecheck 176 -> 174.
+      Browser check on :5002/:5174 via a real login: built a report, preview equal to the seed, "Saved as draft" (draft in
+      Postgres, 404 to another member), Report Detail draft notice and no Share, Edit -> "Save report" -> saved, Share
+      appears; seed removed, re-counted. 072: applied to the test DB; on live a rolled-back dry run only, pending Venkat's OK.
   - **g.** Canned reports — **ONE implementation of the canned-report numbers, reusing 5b's server
     totals** (`GET /deals/report`, `GET /deals/summary`, `GET /leads/summary`); never a second query
     that can disagree with the Reports page.

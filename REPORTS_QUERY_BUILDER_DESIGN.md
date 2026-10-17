@@ -1,8 +1,8 @@
 # P3 design — saved reports and the tenant-scoped query builder
 
 **Status: REVIEWED AND APPROVED 2026-09-19. All nine product decisions are made —
-see §6, which now records the ANSWERS, not the questions. Phases 0 to 3 are
-BUILT (2 and 3 replayed onto main as steps c and d, 2026-10-16/17; see CLAUDE.md).**
+see §6, which now records the ANSWERS, not the questions. Phases 0 to 4 are
+BUILT (2-4 replayed onto main as steps c, d and f, 2026-10-16/17; see CLAUDE.md).**
 
 ### Two things Phase 1 discovered that changed the design
 
@@ -28,7 +28,7 @@ BUILT (2 and 3 replayed onto main as steps c and d, 2026-10-16/17; see CLAUDE.md
 | **1** | Hardened execution: read-only role, RLS, restricted pool, `statement_timeout`, row cap | **built** (migration 055) |
 | **2** | `saved_reports` + `saved_report_grants` + persistence + permissions | **built** (migration 056; ownerless reports + 071 in step c) |
 | **3** | Run endpoints + provenance | **built** (step d: safety check re-run after a failure) |
-| **4** | `CustomReportBuilder` wired | next |
+| **4** | `CustomReportBuilder` wired | **built** (step f; drafts = migration 072) |
 | **5** | `ReportDetailView` | |
 | **6** | Canned reports, incl. Revenue by Industry and by-owner with disclosure | |
 | **7** | Exports (CSV, then PDF/Excel) | |

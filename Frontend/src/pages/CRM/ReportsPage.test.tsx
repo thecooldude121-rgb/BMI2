@@ -138,7 +138,7 @@ describe('/crm/reports — saved reports (step e)', () => {
   const report = (over: Record<string, unknown>) => ({
     id: '11111111-1111-4111-8111-111111111111', name: 'Pipeline by source', description: null, category: null,
     definition: { v: 1, base: 'deals' }, owner_id: 5, owner_name: 'Dee Admin', created_at: '', updated_at: '',
-    ownerless: false, abilities: { can_view: true, can_edit: true, can_delete: true, can_share: true, can_transfer: false },
+    ownerless: false, status: 'saved', abilities: { can_view: true, can_edit: true, can_delete: true, can_share: true, can_transfer: false },
     ...over,
   });
 
@@ -166,10 +166,23 @@ describe('/crm/reports — saved reports (step e)', () => {
     expect(within(section).queryByText(/No saved reports yet/)).toBeNull();
   });
 
-  it('an empty list is an honest empty state, with no button into the unbuilt builder', async () => {
-    render(<MemoryRouter initialEntries={['/crm/reports']}><ReportsPage /></MemoryRouter>);
+  it('an empty list is an honest empty state whose button opens the builder (real since step f)', async () => {
+    let at = '';
+    const Where = () => { at = useLocation().pathname; return null; };
+    render(<MemoryRouter initialEntries={['/crm/reports']}><Routes><Route path="*" element={<><ReportsPage /><Where /></>} /></Routes></MemoryRouter>);
     const section = await screen.findByTestId('saved-reports');
     expect(await within(section).findByText('No saved reports yet')).toBeInTheDocument();
-    expect(within(section).queryByRole('button')).toBeNull();
+    await userEvent.click(within(section).getByRole('button', { name: 'Build a report' }));
+    expect(at).toBe('/crm/custom-report-builder');
+  });
+
+  it('the builder card is labelled "Available", and a draft carries a Draft badge', async () => {
+    api.fetchReports.mockResolvedValue([report({ status: 'draft', name: 'Half-built' })]);
+    render(<MemoryRouter initialEntries={['/crm/reports']}><ReportsPage /></MemoryRouter>);
+    const card = await screen.findByTestId('builder-card');
+    expect(within(card).getByText('Available')).toBeInTheDocument();
+    expect(within(card).queryByText(/Not available/i)).toBeNull();
+    const draft = await within(screen.getByTestId('saved-reports')).findByRole('link', { name: /Half-built/ });
+    expect(within(draft).getByText('Draft')).toBeInTheDocument();
   });
 });

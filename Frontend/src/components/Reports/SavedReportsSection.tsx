@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { EmptyState } from '../ui/EmptyState';
 import { fetchReports, type SavedReport } from '../../utils/reportsApi';
@@ -22,7 +23,7 @@ const whose = (r: SavedReport): { label: string; tone: 'brand' | 'neutral' | 'wa
   return { label: r.abilities.can_edit ? 'Shared with you · can edit' : 'Shared with you', tone: 'neutral' };
 };
 
-const SavedReportsSection: React.FC = () => {
+const SavedReportsSection: React.FC<{ onBuild?: () => void }> = ({ onBuild }) => {
   const [reports, setReports] = useState<SavedReport[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,7 +48,8 @@ const SavedReportsSection: React.FC = () => {
       {!error && reports?.length === 0 && (
         <EmptyState
           title="No saved reports yet"
-          reason="Reports you save, and reports others share with you, appear here. Saving a report arrives with the report builder."
+          reason="Reports you build and save, and reports others share with you, appear here."
+          action={onBuild ? <Button onClick={onBuild}>Build a report</Button> : undefined}
         />
       )}
 
@@ -63,7 +65,10 @@ const SavedReportsSection: React.FC = () => {
                 >
                   <span className="flex items-start justify-between gap-2">
                     <span className="min-w-0 text-base font-semibold text-ink">{r.name}</span>
-                    <Badge tone={w.tone}>{w.label}</Badge>
+                    <span className="flex shrink-0 gap-1">
+                      {r.status === 'draft' && <Badge tone="warning">Draft</Badge>}
+                      <Badge tone={w.tone}>{w.label}</Badge>
+                    </span>
                   </span>
                   {r.description && <span className="line-clamp-2 text-xs text-ink-muted">{r.description}</span>}
                   <span className="text-xs text-ink-muted">

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { BarChart3, TrendingUp, Users, DollarSign, Calendar, Target, Activity, FileText, Download, ChevronRight, ChevronDown, ChevronUp, Star, Clock, Award, Building2, AlertCircle, Eye, Settings, MoreVertical, Plus, RefreshCw, Home, Edit } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import SavedReportsSection from '../../components/Reports/SavedReportsSection';
+import { Badge } from '../../components/ui/Badge';
 import {
   reportsIn, usd, type ReportSection, type ReportData, type ReportDef,
 } from './reportDefinitions';
@@ -987,7 +988,7 @@ const ReportsPage: React.FC = () => {
         {/* The workspace's real saved reports, linked by id to Report Detail
             (reports replay step e) — above the built-in cards, whose View
             controls stay "coming soon" until step g. */}
-        <SavedReportsSection />
+        <SavedReportsSection onBuild={handleNavigateToCustomReportBuilder} />
 
         {/* Sales Performance Section */}
         {true && (
@@ -1209,6 +1210,19 @@ const ReportsPage: React.FC = () => {
               */}
               <>
                   <div className="grid grid-cols-3 gap-6 mb-6">
+                    {/* The builder is real since step f, so its card says "Available"
+                        (the Figma card still reads "Not available yet" — behaviour wins). */}
+                    <div className="rounded-lg border border-gray-200 bg-white p-4 flex flex-col gap-2" data-testid="builder-card">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="text-base font-semibold text-gray-900">Custom Report Builder</h3>
+                        <Badge tone="success">Available</Badge>
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        Build a report from your workspace's deals, accounts, contacts, leads or activities, preview real
+                        results, and save it as a draft or a report.
+                      </p>
+                      <div><Button variant="secondary" size="sm" onClick={handleNavigateToCustomReportBuilder}>Open builder</Button></div>
+                    </div>
                     {renderUnbacked('custom')}
                     {renderReports('custom')}
                   </div>
