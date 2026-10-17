@@ -2478,6 +2478,16 @@ like every other FK here) or stays a slug with a composite FK to a unique
 - **Login incident, 2026-10-16 — cause and fix.** Nobody could sign in because the backend on :5001 was
   not running (not the rate limit, CORS, the reports `.env` lines or stopping old processes); restarting it
   from `BMI2/Backend` fixed it. Use `http://localhost:5173` — Vite listens on `::1`, so `127.0.0.1:5173` does not load.
+  **Why it had stopped:** the backend was a `ts-node-dev --respawn` started on 2026-10-10 by a Claude Code session
+  (`nohup npm run dev`). On 2026-10-14 22:23:37 a merge into main changed `leadsController.ts`; ts-node-dev restarted
+  and the new child died with `Cannot find module …/T/ts-node-dev-hook-….js` — its hook file in the macOS temp folder
+  had been deleted (macOS clears old temp files). The parent stayed alive with no port. Not the session ending.
+- **Start the app with `./scripts/dev.sh`, from your own terminal** (README "Run it locally"): backend (plain
+  ts-node, not ts-node-dev, for the reason above) and frontend together; Ctrl-C stops both; it refuses a busy port.
+  A backend started by a Claude session is detached (survives that session) but not a reboot or logout.
+- **The login page says "Can't reach the server…" when the backend is down** (a failed fetch, or a 502/503/504 with
+  no message) — never anything that reads like a wrong password. `Login.unreachable.test.tsx` drives the real
+  AuthProvider; mutation-tested.
 - **Password reset is NOT built.** The "Forgot password?" link goes nowhere. It needs, in
   dependency order: transactional email delivery (provider, sender domain, SPF/DKIM) — this
   is the decision that blocks everything else; a `password_resets` table of single-use
