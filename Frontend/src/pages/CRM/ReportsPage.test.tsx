@@ -9,10 +9,12 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
  */
 const api = vi.hoisted(() => ({
   fetchDealsSummary: vi.fn(), fetchDealsReport: vi.fn(), fetchLeadSummary: vi.fn(), fetchContactsPage: vi.fn(),
+  fetchReports: vi.fn(),
 }));
 vi.mock('../../utils/dealsApi', async () => ({ ...(await vi.importActual<object>('../../utils/dealsApi')), fetchDealsSummary: api.fetchDealsSummary, fetchDealsReport: api.fetchDealsReport }));
 vi.mock('../../utils/leadsApi', async () => ({ ...(await vi.importActual<object>('../../utils/leadsApi')), fetchLeadSummary: api.fetchLeadSummary }));
 vi.mock('../../utils/contactsApi', async () => ({ ...(await vi.importActual<object>('../../utils/contactsApi')), fetchContactsPage: api.fetchContactsPage }));
+vi.mock('../../utils/reportsApi', async () => ({ ...(await vi.importActual<object>('../../utils/reportsApi')), fetchReports: api.fetchReports }));
 vi.mock('../../components/CRM/CRMNavigation', () => ({ default: () => null }));
 
 import ReportsPage from './ReportsPage';
@@ -40,6 +42,7 @@ beforeEach(() => {
   api.fetchDealsReport.mockResolvedValue(REPORT);
   api.fetchLeadSummary.mockResolvedValue({ total: 20, by_stage: { won: 2, converted: 4, lost: 2 } });
   api.fetchContactsPage.mockResolvedValue({ contacts: [], total: 1500 });
+  api.fetchReports.mockResolvedValue([]);
 });
 const renderPage = () => render(<MemoryRouter><ReportsPage /></MemoryRouter>);
 
@@ -108,8 +111,9 @@ describe('/crm/reports — server totals', () => {
 });
 
 // 2026-10-15: /crm/reports/:slug rendered sample figures under a heading built
-// from the URL. Until Report Detail by id lands (reports replay step e), no card
-// links there — every View control is disabled, and clicking a card goes nowhere.
+// from the URL. Step e built Report Detail BY ID for SAVED reports; the built-in
+// cards keep their View controls disabled until step g, so each of their numbers
+// has one implementation (these server totals), not two.
 describe('/crm/reports — no link to the sample report detail page', () => {
   it('every View control is disabled "coming soon", and clicking a card does not navigate', async () => {
     let path = '';
@@ -121,7 +125,7 @@ describe('/crm/reports — no link to the sample report detail page', () => {
     );
     await screen.findByText('$900K + 2 not in USD');
     const views = screen.getAllByRole('button', { name: /detailed view · Coming soon$/ });
-    expect(views.length).toBeGreaterThanOrEqual(12); // 4 headline tiles + 8 cards
+    expect(views).toHaveLength(12); // 4 headline tiles + 8 cards
     for (const b of views) expect(b).toBeDisabled();
     expect(screen.queryByRole('button', { name: /^(View|View Report)$/ })).toBeNull();
     await userEvent.click(screen.getByText('REVENUE WON'));
@@ -130,3 +134,42 @@ describe('/crm/reports — no link to the sample report detail page', () => {
   });
 });
 
+describe('/crm/reports — saved reports (step e)', () => {
+  const report = (over: Record<string, unknown>) => ({
+    id: '11111111-1111-4111-8111-111111111111', name: 'Pipeline by source', description: null, category: null,
+    definition: { v: 1, base: 'deals' }, owner_id: 5, owner_name: 'Dee Admin', created_at: '', updated_at: '',
+    ownerless: false, abilities: { can_view: true, can_edit: true, can_delete: true, can_share: true, can_transfer: false },
+    ...over,
+  });
+
+  it('lists the real saved reports linked BY ID, while the 12 built-in View controls stay coming soon', async () => {
+    api.fetchReports.mockResolvedValue([
+      report({}),
+      report({ id: '22222222-2222-4222-8222-222222222222', name: 'Shared to me', owner_name: 'Kai Rep',
+        abilities: { can_view: true, can_edit: false, can_delete: false, can_share: false, can_transfer: false } }),
+    ]);
+    render(<MemoryRouter initialEntries={['/crm/reports']}><ReportsPage /></MemoryRouter>);
+    const section = await screen.findByTestId('saved-reports');
+    const mine = await within(section).findByRole('link', { name: /Pipeline by source/ });
+    expect(mine).toHaveAttribute('href', '/crm/reports/11111111-1111-4111-8111-111111111111');
+    expect(within(section).getByRole('link', { name: /Shared to me/ })).toHaveTextContent(/Shared with you.*Owner: Kai Rep/);
+    expect(within(mine).getByText('Yours')).toBeInTheDocument();
+    await screen.findByText('$900K + 2 not in USD');
+    for (const b of screen.getAllByRole('button', { name: /detailed view · Coming soon$/ })) expect(b).toBeDisabled();
+  });
+
+  it('a failed load says so — never "no saved reports"', async () => {
+    api.fetchReports.mockRejectedValue(new Error('Request failed (500)'));
+    render(<MemoryRouter initialEntries={['/crm/reports']}><ReportsPage /></MemoryRouter>);
+    const section = await screen.findByTestId('saved-reports');
+    expect(await within(section).findByText("Couldn't load your saved reports")).toBeInTheDocument();
+    expect(within(section).queryByText(/No saved reports yet/)).toBeNull();
+  });
+
+  it('an empty list is an honest empty state, with no button into the unbuilt builder', async () => {
+    render(<MemoryRouter initialEntries={['/crm/reports']}><ReportsPage /></MemoryRouter>);
+    const section = await screen.findByTestId('saved-reports');
+    expect(await within(section).findByText('No saved reports yet')).toBeInTheDocument();
+    expect(within(section).queryByRole('button')).toBeNull();
+  });
+});

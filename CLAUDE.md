@@ -1984,8 +1984,29 @@ old constraint, which fails the shared-name test.
       a malformed report id on any `/reports/:id…` route is a 404 (it was a masked 500 from the uuid cast).
     - Tests: `roundTrip.reportRun` (16: Phase 3's 14 + ownerless run + malformed id), `roundTrip.reportsSafetyRecheck`
       (4), `roundTrip.reportsRls` (a definite failure is refused again). Mutation-tested (8, all killed).
-  - **e.** Report Detail BY ID (replaces the interim stub above; the Reports page's View controls
-    come back pointing at real ids).
+  - **e.** Report Detail BY ID. **BUILT 2026-10-17** (P3 Phase 5, re-done on main's shell and tokens).
+    `/crm/reports/:reportId` (`ReportDetailView`) replaces the interim stub. Rules decided by Venkat 2026-10-17:
+    - **An old `/crm/reports/<slug>` address never shows sample data:** a parameter that is not a UUID gets an honest
+      "This report address is out of date" with a link to Reports — no request is sent and the slug is never echoed.
+    - **Provenance is on the page** (`components/Reports/ProvenancePanel`): the server's disclosure sentence verbatim,
+      then four tiles where the Figma frame draws its KPI tiles — seeded vs real ("Not recorded", never 0, where
+      unmeasurable), test records left out, rows with no linked record (per join), and the row limit (Complete / Cut off).
+    - **"Shared with N people" is back, read from the real grants** (`GET /reports/:id/grants`); a failed load says so,
+      never "Not shared". The owner's Share dialog edits real grants (active members only, owner excluded, nobody
+      emailed). **"Saved as draft" waits for the builder (step f).**
+    - **An unknown id, or one you may not see, is ONE "Report not found"** (the server's 404, never 403).
+    - Controls follow the served abilities (absent if you lack them): Share, Delete; Edit is "Coming soon" until step f;
+      Export and Schedule "Coming soon" (steps h, i). Delete navigates only after the 2xx. A failed re-run clears the table.
+    - **Figma "Report detail" (75:13056)** gave the layout — breadcrumb, header with actions, a summary row (what the
+      definition reads, read-only), four tiles, the table, the "not available yet" note. Its sample KPIs, charts and
+      "Share · Coming soon" were not copied: the tiles are provenance, a run returns a table, and sharing is real.
+    - **The Reports page lists the real saved reports** (`components/Reports/SavedReportsSection`, linked by id; a failed
+      load is an error). **The 12 built-in View controls stay "coming soon" until step g**, so each number has one
+      implementation.
+    - Tests: `ReportDetailView.test.tsx` (14), `ReportsPage.test.tsx` (+3, and exactly 12 disabled View controls).
+      Mutation-tested (12, all killed). Browser check through a real login on `bmi_crm_iso_test` (backend :5002,
+      frontend :5174): figures equal to SQL, view-only and ownerless controls, truncation, slug / unknown / not-shared
+      404s, a grant removed and a report deleted, both confirmed in Postgres; seed removed and re-counted.
   - **f.** The builder. **Once it is real, label it "Available"** — even though the Figma card
     still says "Not available yet" (behaviour beats the frame here).
   - **g.** Canned reports — **ONE implementation of the canned-report numbers, reusing 5b's server

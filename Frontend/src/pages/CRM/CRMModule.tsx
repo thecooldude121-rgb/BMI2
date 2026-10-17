@@ -93,7 +93,7 @@ const CRMModule = () => {
           <Route path="/activities/:id" element={<ActivityDetailPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/custom-report-builder" element={<CustomReportBuilder />} />
-          <Route path="/reports/:reportSlug" element={<ReportDetailView />} />
+          <Route path="/reports/:reportId" element={<ReportDetailView />} />
           <Route path="/documents" element={<DocumentsLibrary />} />
           <Route path="/documents/:documentId" element={<DocumentDetailPage />} />
           <Route path="/ai-copilot" element={<AICopilotPage />} />
