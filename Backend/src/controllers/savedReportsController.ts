@@ -430,7 +430,7 @@ export const listTransferCandidates = async (req: AuthRequest, res: Response, ne
     const tenantId = requireTenantId(req);
     const report = await pool.query(
       `SELECT r.id FROM saved_reports r
-        WHERE r.tenant_id = $1 AND r.id = $2 AND $3::boolean AND r.status = 'saved' AND ${isOwnerlessPredicate('r')}`,
+        WHERE r.tenant_id = $1 AND r.id = $2 AND $3::boolean AND ${isOwnerlessPredicate('r')}`,
       [tenantId, req.params.id, isAdminCaller(req)],
     );
     if (!report.rows[0]) { res.status(404).json({ success: false, message: 'Report not found' }); return; }
@@ -478,7 +478,7 @@ export const transferReport = async (req: AuthRequest, res: Response, next: Next
     if (!report) { await client.query('ROLLBACK'); notFound(); return; }
 
     const ownerless = await client.query(
-      `SELECT (r.status = 'saved' AND ${isOwnerlessPredicate('r')}) AS ownerless FROM saved_reports r WHERE r.tenant_id = $1 AND r.id = $2`,
+      `SELECT ${isOwnerlessPredicate('r')} AS ownerless FROM saved_reports r WHERE r.tenant_id = $1 AND r.id = $2`,
       [tenantId, report.id],
     );
     // An owned report is absent to an admin, exactly as on every other route.

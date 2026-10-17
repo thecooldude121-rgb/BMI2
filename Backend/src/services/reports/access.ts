@@ -112,9 +112,11 @@ export function isOwnerlessPredicate(alias: string): string {
  * from the request body.
  */
 export function adminOwnerlessPredicate(alias: string, adminParam: number): string {
-  // A DRAFT is private to its owner (072), so an ownerless draft is not an
-  // admin's to see — not even to delete or transfer.
-  return `($${adminParam}::boolean AND ${alias}.status = 'saved' AND ${isOwnerlessPredicate(alias)})`;
+  // Drafts follow the same ownerless rule as saved reports (decided by Venkat
+  // 2026-10-18; it reverses the first draft rule of 2026-10-17): once the owner
+  // is gone, an admin may view, delete or transfer a draft too. While the owner
+  // is active nobody else sees it — grants still count only on SAVED reports.
+  return `($${adminParam}::boolean AND ${isOwnerlessPredicate(alias)})`;
 }
 
 /** View: the ordinary rule, or an admin looking at an ownerless report. */
@@ -152,10 +154,12 @@ export function abilitiesFor(
   grantLevel: GrantLevel | null, userId: number, isAdmin: boolean,
 ): ReportAbilities {
   const isOwner = row.owner_id !== null && Number(row.owner_id) === Number(userId);
-  // A draft (072) is the owner's alone: grants and admin rights count only on a saved report.
+  // A draft (072) is the owner's alone while the owner is active: grants count
+  // only on a saved report. Once it is ownerless, an admin has the same rights
+  // over a draft as over a saved report (2026-10-18).
   const saved = row.status === 'saved';
   const grant = saved ? grantLevel : null;
-  const adminOverOwnerless = isAdmin && saved && row.ownerless;
+  const adminOverOwnerless = isAdmin && row.ownerless;
   return {
     can_view:     isOwner || grant !== null || adminOverOwnerless,
     can_edit:     isOwner || grant === 'edit',

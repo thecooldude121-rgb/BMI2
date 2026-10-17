@@ -2019,12 +2019,19 @@ old constraint, which fails the shared-name test.
       only on text fields. A registry that fails to load, or serves no modules, offers nothing — never a local list.
     - **The preview is a real run** (`POST /reports/run`) with the step e provenance panel; any edit clears it.
     - **DRAFTS ARE A REAL STATE — migration 072, decided by Venkat 2026-10-17 ("Real draft state").**
-      `saved_reports.status` draft | saved (default saved). A draft is private to its owner: a grant counts only on a
-      saved report (in the predicates, so even a stray grant row on a draft gives nothing), an admin has no rights over an
-      ownerless DRAFT (no view, delete or transfer), and sharing a draft is a 409 to its owner. Status moves one way:
-      draft -> saved; asking for saved -> draft is a 409 to someone who may edit it, 404 to anyone else.
-      **Consequence to know: an ownerless draft (its owner deactivated or deleted) is visible to nobody and can only be
-      removed in the database** — the rule as decided; revisit if it ever matters.
+      `saved_reports.status` draft | saved (default saved). While its owner is active a draft is private to them: a grant
+      counts only on a saved report (in the predicates, so even a stray grant row on a draft gives nothing), and sharing a
+      draft is a 409 to its owner. Status moves one way: draft -> saved; asking for saved -> draft is a 409 to someone who
+      may edit it, 404 to anyone else.
+    - **OWNERLESS DRAFTS follow the saved-report rule — decided by Venkat 2026-10-18** (it replaced the first draft rule,
+      under which an ownerless draft was visible to nobody and removable only in the database). Once the owner is
+      deactivated or deleted, a workspace admin may view, run, delete or transfer the draft — not edit or share it — and
+      the new owner gets it **still a draft** (the transfer does not touch `status`). Another workspace's admin gets 404.
+      072's own comment still describes the first rule; an applied migration is a ledger entry, not a document to revise
+      (lesson 14) — `services/reports/access.ts` is the rule. `roundTrip.savedReportsDrafts` covers a deactivated owner's
+      draft (view, transfer, stays a draft, new owner cannot share it until saved), a deleted owner's draft (admin delete)
+      and another workspace's admin (404, nothing changes); 6 breakages killed in a separate copy; browser-checked with
+      `scripts/e2e-servers.sh`.
     - **"Save draft" -> "Saved as draft", "Save" -> "Saved"**, each only after the 2xx; a refusal keeps the input.
       Editing a saved report offers no "Save draft". Report Detail and the Saved reports list show a Draft badge.
     - **Labelled "Available"** on the Reports page's Custom section (the Figma card still says "Not available yet" —

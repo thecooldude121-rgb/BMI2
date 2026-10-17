@@ -319,6 +319,19 @@ describe('admin transfer of an ownerless report', () => {
     expect(screen.queryByTestId('report-transferred')).toBeNull();
   });
 
+  it('an ownerless DRAFT: the notice speaks to the admin, and a transfer says it stays a draft', async () => {
+    api.fetchReport.mockResolvedValue({ ...OWNERLESS, status: 'draft' });
+    api.transferReport.mockResolvedValue({ report: { ...REPORT, status: 'draft', abilities: { ...VIEWER, can_view: false } }, transfer: RECORD });
+    show();
+    expect(await screen.findByText(/Its owner is no longer active, so as an admin you can view, delete or transfer it/)).toBeInTheDocument();
+    expect(screen.queryByText(/Only you can see it/)).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Transfer' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.selectOptions(await within(dialog).findByRole('combobox'), '9');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Transfer' }));
+    expect(await screen.findByTestId('report-transferred')).toHaveTextContent('It is still a draft, private to them until they save it');
+  });
+
   it('transferring to yourself keeps you on the report, now with owner controls', async () => {
     api.transferReport.mockResolvedValue({ report: { ...REPORT, abilities: OWNER }, transfer: { ...RECORD, to_user_id: 5, to_user_name: 'Dee Admin' } });
     show();
