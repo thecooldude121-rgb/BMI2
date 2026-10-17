@@ -244,7 +244,8 @@ const SavedReportDetail: React.FC<{ reportId: string }> = ({ reportId }) => {
         <Breadcrumb current={report.name} />
         <PageHeader eyebrow="Reports" title={`Transferred to ${transferred.to_user_name}`} />
         <Alert tone="success" title={`“${report.name}” now belongs to ${transferred.to_user_name}`}>
-          They have full owner rights. It is private to them now, so it no longer appears in your list.
+          They have full owner rights.{' '}
+          {report.status === 'draft' ? 'It is still a draft, private to them until they save it,' : 'It is private to them now,'} so it no longer appears in your list.
           {' '}Recorded: moved by {transferred.transferred_by_name}
           {transferred.from_user_name ? ` from ${transferred.from_user_name}` : ' (it had no owner)'}
           {' '}on {new Date(transferred.transferred_at).toLocaleString()}.
@@ -311,7 +312,9 @@ const SavedReportDetail: React.FC<{ reportId: string }> = ({ reportId }) => {
 
       {report.status === 'draft' && (
         <Alert tone="info" title="This is a draft">
-          Only you can see it, and it can&rsquo;t be shared yet. Open it in the builder and choose Save report when it is ready.
+          {report.ownerless
+            ? 'Its owner is no longer active, so as an admin you can view, delete or transfer it. Whoever you transfer it to gets it as a draft, private to them.'
+            : <>Only you can see it, and it can&rsquo;t be shared yet. Open it in the builder and choose Save report when it is ready.</>}
         </Alert>
       )}
 

@@ -6,9 +6,11 @@ import { DEFINITION_VERSION, type ReportDefinition } from '../services/reports/t
 
 /**
  * DRAFT REPORTS (migration 072) — decided by Venkat 2026-10-17 ("Real draft
- * state"). A draft is private to its owner: hidden from grantees and from admins
- * (even when ownerless), not shareable until saved, and status moves one way
- * only, draft -> saved. Anything a caller may not see is 404, never 403.
+ * state"). A draft is private to its owner while that owner is active: hidden
+ * from grantees and admins, not shareable until saved, and status moves one way
+ * only, draft -> saved. Once ownerless, a draft follows the saved-report rule
+ * (2026-10-18): an admin may view, delete or transfer it. Anything a caller may
+ * not see is 404, never 403.
  */
 describe('Saved reports — drafts', () => {
   let admin: TestWorkspace;   // workspace admin
@@ -99,19 +101,77 @@ describe('Saved reports — drafts', () => {
     expect(await row(id)).toEqual(before);
   });
 
-  it('an OWNERLESS draft is not the admin\'s either: no view, delete, transfer or candidates', async () => {
+  /*
+   * OWNERLESS DRAFTS follow the saved-report rule — decided by Venkat 2026-10-18,
+   * reversing the first draft rule of 2026-10-17 (an ownerless draft was nobody's).
+   */
+  it('a DEACTIVATED owner\'s draft: the admin may view, run and transfer it; the new owner gets it still a draft', async () => {
     const goner = await addUserWithRole(admin, 'sales');
     const id = (await create(goner, { status: 'draft' })).body.data.id;
+    // While the owner is active, nobody else sees it — the admin included.
+    expect((await request(app).get(`/api/v1/reports/${id}`).set(auth(admin))).status).toBe(404);
     const deact = await request(app).post(`/api/v1/users/${goner.userId}/deactivate`).set(auth(admin));
     expect(deact.status, JSON.stringify(deact.body)).toBe(200);
+
+    expect(await listIds(admin)).toContain(id);
+    const seen = await request(app).get(`/api/v1/reports/${id}`).set(auth(admin));
+    expect(seen.status).toBe(200);
+    expect(seen.body.data).toMatchObject({ status: 'draft', ownerless: true });
+    expect(seen.body.data.abilities).toEqual({ can_view: true, can_edit: false, can_delete: true, can_share: false, can_transfer: true });
+    expect((await request(app).get(`/api/v1/reports/${id}/run`).set(auth(admin))).status).toBe(200);
+    // Still nobody else's: another member gets nothing, and the admin may not edit or share it.
+    expect((await request(app).get(`/api/v1/reports/${id}`).set(auth(other))).status).toBe(404);
     const before = await row(id);
-    expect(await listIds(admin)).not.toContain(id);
-    expect((await request(app).get(`/api/v1/reports/${id}`).set(auth(admin))).status).toBe(404);
-    expect((await request(app).delete(`/api/v1/reports/${id}`).set(auth(admin))).status).toBe(404);
-    expect((await request(app).get(`/api/v1/reports/${id}/transfer-candidates`).set(auth(admin))).status).toBe(404);
-    expect((await request(app).post(`/api/v1/reports/${id}/transfer`).set(auth(admin)).send({ to_user_id: Number(other.userId) })).status).toBe(404);
+    expect((await request(app).patch(`/api/v1/reports/${id}`).set(auth(admin)).send({ name: 'Hijacked' })).status).toBe(404);
+    expect((await request(app).put(`/api/v1/reports/${id}/grants`).set(auth(admin)).send({ user_id: Number(other.userId), level: 'view' })).status).toBe(404);
     expect(await row(id)).toEqual(before);
-    expect((await pool.query('SELECT 1 FROM saved_report_transfers WHERE report_id = $1', [id])).rowCount).toBe(0);
+
+    const cands = await request(app).get(`/api/v1/reports/${id}/transfer-candidates`).set(auth(admin));
+    expect(cands.status).toBe(200);
+    expect((cands.body.data as { id: number }[]).map(c => c.id)).toContain(Number(other.userId));
+    const t = await request(app).post(`/api/v1/reports/${id}/transfer`).set(auth(admin)).send({ to_user_id: Number(other.userId) });
+    expect(t.status, JSON.stringify(t.body)).toBe(200);
+    expect(t.body.data.status).toBe('draft');
+    expect(await row(id)).toMatchObject({ owner_id: Number(other.userId), status: 'draft' });
+    expect((await pool.query('SELECT from_user_id, to_user_id FROM saved_report_transfers WHERE report_id = $1', [id])).rows)
+      .toEqual([{ from_user_id: Number(goner.userId), to_user_id: Number(other.userId) }]);
+
+    // The new owner has it as a draft: theirs alone, editable, not shareable until saved.
+    const mine = await request(app).get(`/api/v1/reports/${id}`).set(auth(other));
+    expect(mine.body.data.abilities).toEqual({ can_view: true, can_edit: true, can_delete: true, can_share: false, can_transfer: false });
+    expect((await request(app).put(`/api/v1/reports/${id}/grants`).set(auth(other)).send({ user_id: Number(admin.userId), level: 'view' })).status).toBe(409);
+    // And it is private again: its owner is active.
+    expect((await request(app).get(`/api/v1/reports/${id}`).set(auth(admin))).status).toBe(404);
+  });
+
+  it('a DELETED owner\'s draft: the admin may delete it', async () => {
+    const goner = await addUserWithRole(admin, 'sales');
+    const id = (await create(goner, { status: 'draft' })).body.data.id;
+    await pool.query('DELETE FROM users WHERE id = $1 AND tenant_id = $2', [goner.userId, admin.tenantId]);
+    expect((await row(id)).owner_id).toBeNull();
+    expect((await request(app).get(`/api/v1/reports/${id}`).set(auth(admin))).body.data).toMatchObject({ status: 'draft', owner_id: null });
+    expect((await request(app).delete(`/api/v1/reports/${id}`).set(auth(admin))).status).toBe(200);
+    expect(await row(id)).toBeUndefined();
+  });
+
+  it('another workspace\'s admin gets 404 on an ownerless draft, and nothing changes', async () => {
+    const elsewhere = await setupWorkspace('rpt-drafts-other');
+    try {
+      const goner = await addUserWithRole(admin, 'sales');
+      const id = (await create(goner, { status: 'draft' })).body.data.id;
+      await request(app).post(`/api/v1/users/${goner.userId}/deactivate`).set(auth(admin));
+      const before = await row(id);
+      expect(await listIds(elsewhere)).not.toContain(id);
+      expect((await request(app).get(`/api/v1/reports/${id}`).set(auth(elsewhere))).status).toBe(404);
+      expect((await request(app).get(`/api/v1/reports/${id}/run`).set(auth(elsewhere))).status).toBe(404);
+      expect((await request(app).delete(`/api/v1/reports/${id}`).set(auth(elsewhere))).status).toBe(404);
+      expect((await request(app).get(`/api/v1/reports/${id}/transfer-candidates`).set(auth(elsewhere))).status).toBe(404);
+      expect((await request(app).post(`/api/v1/reports/${id}/transfer`).set(auth(elsewhere)).send({ to_user_id: Number(elsewhere.userId) })).status).toBe(404);
+      expect(await row(id)).toEqual(before);
+      expect((await pool.query('SELECT 1 FROM saved_report_transfers WHERE report_id = $1', [id])).rowCount).toBe(0);
+    } finally {
+      await teardownWorkspace(elsewhere);
+    }
   });
 
   it('an over-long name or category is a 400 naming the field, not a masked 500', async () => {
