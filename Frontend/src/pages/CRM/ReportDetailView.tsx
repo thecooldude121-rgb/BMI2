@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { RefreshCw, Share2, Trash2, Pencil, Download, CalendarClock, Info } from 'lucide-react';
+import { RefreshCw, Share2, Trash2, Pencil, Download, CalendarClock, Info, UserCheck } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Alert } from '../../components/ui/Alert';
@@ -10,8 +10,9 @@ import PageHeader from '../../components/Layout/PageHeader';
 import ProvenancePanel from '../../components/Reports/ProvenancePanel';
 import {
   fetchReport, runSavedReport, deleteReport, fetchGrants, setGrant, revokeGrant,
-  isReportId, sharedWithLabel, ReportsApiError,
+  isReportId, sharedWithLabel, ReportsApiError, fetchTransferCandidates, transferReport,
   type SavedReport, type ReportRun, type ReportGrant, type GrantLevel,
+  type TransferCandidate, type TransferRecord,
 } from '../../utils/reportsApi';
 import { fetchRoster, type WorkspaceMember } from '../../utils/usersApi';
 
@@ -125,6 +126,9 @@ const SavedReportDetail: React.FC<{ reportId: string }> = ({ reportId }) => {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [transferOpen, setTransferOpen] = useState(false);
+  // Set only after the server confirmed the transfer and recorded it.
+  const [transferred, setTransferred] = useState<TransferRecord | null>(null);
 
   const doRun = useCallback(async () => {
     setRunning(true);
@@ -231,6 +235,25 @@ const SavedReportDetail: React.FC<{ reportId: string }> = ({ reportId }) => {
     );
   }
 
+  if (transferred) {
+    // The new owner is active, so the report is no longer ownerless and no
+    // longer visible to the admin who moved it (step c's rule) — say so
+    // rather than leaving a page that would now 404 on its next request.
+    return (
+      <div className="flex flex-col gap-4" data-testid="report-transferred">
+        <Breadcrumb current={report.name} />
+        <PageHeader eyebrow="Reports" title={`Transferred to ${transferred.to_user_name}`} />
+        <Alert tone="success" title={`“${report.name}” now belongs to ${transferred.to_user_name}`}>
+          They have full owner rights. It is private to them now, so it no longer appears in your list.
+          {' '}Recorded: moved by {transferred.transferred_by_name}
+          {transferred.from_user_name ? ` from ${transferred.from_user_name}` : ' (it had no owner)'}
+          {' '}on {new Date(transferred.transferred_at).toLocaleString()}.
+        </Alert>
+        <div><Button variant="secondary" onClick={() => navigate('/crm/reports')}>Go to Reports</Button></div>
+      </div>
+    );
+  }
+
   const a = report.abilities;
   const ownerLine = report.owner_id === null
     ? 'No owner — the account that created it was deleted'
@@ -264,6 +287,11 @@ const SavedReportDetail: React.FC<{ reportId: string }> = ({ reportId }) => {
             {a.can_edit && (
               <Button variant="secondary" disabled title="Editing arrives with the report builder">
                 <Pencil className="h-4 w-4" aria-hidden="true" /> Edit · Coming soon
+              </Button>
+            )}
+            {a.can_transfer && (
+              <Button variant="secondary" onClick={() => setTransferOpen(true)}>
+                <UserCheck className="h-4 w-4" aria-hidden="true" /> Transfer
               </Button>
             )}
             {a.can_delete && (
@@ -422,6 +450,24 @@ const SavedReportDetail: React.FC<{ reportId: string }> = ({ reportId }) => {
         </div>
       </Modal>
 
+      {transferOpen && (
+        <TransferDialog
+          reportId={reportId}
+          reportName={report.name}
+          onClose={() => setTransferOpen(false)}
+          onTransferred={(result) => {
+            setTransferOpen(false);
+            if (result.report.abilities?.can_view) {
+              // Transferred to themselves: they own it now; show it with owner controls.
+              setReport(result.report);
+              void loadShareCount();
+            } else {
+              setTransferred(result.transfer);
+            }
+          }}
+        />
+      )}
+
       {shareOpen && (
         <ShareDialog
           reportId={reportId}
@@ -439,6 +485,92 @@ const SavedReportDetail: React.FC<{ reportId: string }> = ({ reportId }) => {
  * offered (access nobody can use reads as a share that worked). Nobody is
  * emailed, and the dialog says so.
  */
+/**
+ * TRANSFER AN OWNERLESS REPORT (admin only — step c). The picker is step c's
+ * `GET /reports/:id/transfer-candidates`: active members of this workspace,
+ * nobody else. Success is reported only after the server moved the report and
+ * recorded the transfer; a refusal keeps the dialog open with its reason.
+ */
+const TransferDialog: React.FC<{
+  reportId: string;
+  reportName: string;
+  onClose: () => void;
+  onTransferred: (r: { report: SavedReport; transfer: TransferRecord }) => void;
+}> = ({ reportId, reportName, onClose, onTransferred }) => {
+  const [people, setPeople] = useState<TransferCandidate[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [choice, setChoice] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchTransferCandidates(reportId)
+      .then(list => { if (!cancelled) setPeople(list); })
+      .catch((e: Error) => { if (!cancelled) setLoadError(e.message); });
+    return () => { cancelled = true; };
+  }, [reportId]);
+
+  const submit = async () => {
+    if (!choice) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      onTransferred(await transferReport(reportId, Number(choice)));
+    } catch (e) {
+      setSaveError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      isOpen
+      onClose={() => { if (!saving) onClose(); }}
+      title="Transfer this report"
+      description={reportName}
+      size="sm"
+      footer={(
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={() => void submit()} disabled={!choice || saving}>
+            {saving ? 'Transferring…' : 'Transfer'}
+          </Button>
+        </div>
+      )}
+    >
+      <div className="flex flex-col gap-3 text-sm">
+        <p className="text-ink-muted">
+          This report has no active owner. The person you choose becomes its owner with full rights, and the
+          transfer is recorded. Once they own it, it is private to them unless they share it.
+        </p>
+        {loadError && <Alert tone="danger" title="Couldn't load the people you can choose">{loadError}</Alert>}
+        {!loadError && people === null && <p className="text-ink-muted" role="status">Loading people…</p>}
+        {people && people.length === 0 && (
+          <p className="text-ink-muted">There is nobody active in this workspace to transfer it to.</p>
+        )}
+        {people && people.length > 0 && (
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-semibold text-ink">New owner</span>
+            <select
+              value={choice}
+              onChange={e => setChoice(e.target.value)}
+              className="rounded-ctrl border border-line bg-white px-2 py-1.5 text-sm"
+            >
+              <option value="">Choose an active member…</option>
+              {people.map(p => (
+                <option key={p.id} value={String(p.id)}>{p.name ? `${p.name} · ${p.email}` : p.email}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        {saveError && <Alert tone="danger" title="The report was not transferred">{saveError}</Alert>}
+      </div>
+    </Modal>
+  );
+};
+
 const ShareDialog: React.FC<{
   reportId: string; reportName: string; ownerId: number | null; onClose: () => void;
 }> = ({ reportId, reportName, ownerId, onClose }) => {

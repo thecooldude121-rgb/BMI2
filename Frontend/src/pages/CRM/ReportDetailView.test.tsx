@@ -12,11 +12,13 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 const api = vi.hoisted(() => ({
   fetchReport: vi.fn(), runSavedReport: vi.fn(), deleteReport: vi.fn(),
   fetchGrants: vi.fn(), setGrant: vi.fn(), revokeGrant: vi.fn(), fetchRoster: vi.fn(),
+  fetchTransferCandidates: vi.fn(), transferReport: vi.fn(),
 }));
 vi.mock('../../utils/reportsApi', async () => ({
   ...(await vi.importActual<object>('../../utils/reportsApi')),
   fetchReport: api.fetchReport, runSavedReport: api.runSavedReport, deleteReport: api.deleteReport,
   fetchGrants: api.fetchGrants, setGrant: api.setGrant, revokeGrant: api.revokeGrant,
+  fetchTransferCandidates: api.fetchTransferCandidates, transferReport: api.transferReport,
 }));
 vi.mock('../../utils/usersApi', async () => ({
   ...(await vi.importActual<object>('../../utils/usersApi')), fetchRoster: api.fetchRoster,
@@ -238,5 +240,82 @@ describe('share dialog', () => {
     expect(api.setGrant).toHaveBeenCalledWith(ID, 9, 'view');
     await userEvent.click(within(dialog).getByRole('button', { name: /close/i }));
     expect(await screen.findByTestId('report-shared-with')).toHaveTextContent('Shared with 2 people');
+  });
+});
+
+describe('admin transfer of an ownerless report', () => {
+  const ADMIN_ON_OWNERLESS = { can_view: true, can_edit: false, can_delete: true, can_share: false, can_transfer: true };
+  const OWNERLESS = { ...REPORT, ownerless: true, owner_name: 'Olu Former', abilities: ADMIN_ON_OWNERLESS };
+  const RECORD = {
+    from_user_id: 4, from_user_name: 'Olu Former', to_user_id: 9, to_user_name: 'Bo New',
+    transferred_by: 5, transferred_by_name: 'Dee Admin', transferred_at: '2026-10-17T10:00:00Z',
+  };
+  beforeEach(() => {
+    api.fetchReport.mockResolvedValue(OWNERLESS);
+    api.fetchTransferCandidates.mockResolvedValue([
+      { id: 5, name: 'Dee Admin', email: 'dee@x.test' },
+      { id: 9, name: 'Bo New', email: 'bo@x.test' },
+    ]);
+  });
+
+  it('an admin sees Transfer next to Delete only when the server says can_transfer', async () => {
+    show();
+    expect(await screen.findByText('Owner Olu Former is deactivated')).toBeInTheDocument();
+    const buttons = screen.getAllByRole('button').map(b => b.textContent?.trim());
+    expect(buttons.indexOf('Transfer') + 1).toBe(buttons.indexOf('Delete'));
+    expect(screen.queryByRole('button', { name: /^Share$/ })).toBeNull();
+  });
+
+  it('no Transfer for anyone else (can_transfer false)', async () => {
+    api.fetchReport.mockResolvedValue({ ...REPORT, abilities: OWNER });
+    show();
+    await screen.findByTestId('report-results');
+    expect(screen.queryByRole('button', { name: 'Transfer' })).toBeNull();
+  });
+
+  it("picks from step c's candidates (not the roster), and reports success only after the server recorded it", async () => {
+    let finish: (v: unknown) => void = () => {};
+    api.transferReport.mockReturnValue(new Promise(r => { finish = r; }));
+    show();
+    await userEvent.click(await screen.findByRole('button', { name: 'Transfer' }));
+    const dialog = await screen.findByRole('dialog');
+    const select = await within(dialog).findByRole('combobox');
+    expect(within(select).getAllByRole('option').map(o => o.textContent)).toEqual(
+      ['Choose an active member…', 'Dee Admin · dee@x.test', 'Bo New · bo@x.test']);
+    expect(api.fetchTransferCandidates).toHaveBeenCalledWith(ID);
+    expect(api.fetchRoster).not.toHaveBeenCalled();
+    expect(within(dialog).getByRole('button', { name: 'Transfer' })).toBeDisabled();
+    await userEvent.selectOptions(select, '9');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Transfer' }));
+    expect(api.transferReport).toHaveBeenCalledWith(ID, 9);
+    expect(screen.queryByTestId('report-transferred')).toBeNull();     // not before the 2xx
+    finish({ report: { ...REPORT, abilities: { ...VIEWER, can_view: false } }, transfer: RECORD });
+    const done = await screen.findByTestId('report-transferred');
+    expect(done).toHaveTextContent('Transferred to Bo New');
+    expect(done).toHaveTextContent(/moved by Dee Admin from Olu Former/);
+  });
+
+  it('a refusal keeps the dialog open with the reason, and nothing claims success', async () => {
+    api.transferReport.mockRejectedValue(new ReportsApiError('to_user_id does not name an active member of this workspace', 400));
+    show();
+    await userEvent.click(await screen.findByRole('button', { name: 'Transfer' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.selectOptions(await within(dialog).findByRole('combobox'), '9');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Transfer' }));
+    expect(await within(dialog).findByText('The report was not transferred')).toBeInTheDocument();
+    expect(dialog).toHaveTextContent('does not name an active member');
+    expect(screen.queryByTestId('report-transferred')).toBeNull();
+  });
+
+  it('transferring to yourself keeps you on the report, now with owner controls', async () => {
+    api.transferReport.mockResolvedValue({ report: { ...REPORT, abilities: OWNER }, transfer: { ...RECORD, to_user_id: 5, to_user_name: 'Dee Admin' } });
+    show();
+    await userEvent.click(await screen.findByRole('button', { name: 'Transfer' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.selectOptions(await within(dialog).findByRole('combobox'), '5');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Transfer' }));
+    expect(await screen.findByRole('button', { name: /^Share$/ })).toBeEnabled();
+    expect(screen.queryByTestId('report-transferred')).toBeNull();
+    expect(screen.getByText('Owner: Dee Admin')).toBeInTheDocument();
   });
 });
