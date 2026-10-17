@@ -215,6 +215,11 @@ describe('Reports RLS — the restricted execution path', () => {
       process.env.REPORTS_DB_USER = role;
       process.env.REPORTS_DB_PASSWORD = pw;
       await expect(assertRowSecurityActive()).rejects.toThrow(/NOT in effect/);
+      // Step d: a failure is no longer cached, so the next run checks AGAIN — and
+      // a definite failure is refused again, with nothing served.
+      await expect(assertRowSecurityActive()).rejects.toThrow(/NOT in effect/);
+      await expect(runScopedReportQuery('SELECT count(*) FROM deals', [], a.tenantId, 5000))
+        .rejects.toThrow(/NOT in effect/);
     } finally {
       process.env.REPORTS_DB_USER = realUser;
       process.env.REPORTS_DB_PASSWORD = realPass;

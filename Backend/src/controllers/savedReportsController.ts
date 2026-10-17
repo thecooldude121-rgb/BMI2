@@ -5,6 +5,8 @@ import { requireTenantId } from '../middleware/tenant';
 import { foreignIdsInTenant } from '../utils/tenantScope';
 import { buildReportQuery, ReportDefinitionError } from '../services/reports/queryBuilder';
 import { REPORT_MODULES, REPORT_FIELDS } from '../services/reports/registry';
+import { runReport, ReportTimeout } from '../services/reports/runner';
+import { ReportsPoolUnavailable } from '../config/reportsDatabase';
 import {
   canViewPredicate, canEditPredicate, isOwnerPredicate,
   canViewOrAdminPredicate, canDeletePredicate, isOwnerlessPredicate,
@@ -460,5 +462,93 @@ export const transferReport = async (req: AuthRequest, res: Response, next: Next
     next(error);
   } finally {
     client.release();
+  }
+};
+
+/**
+ * The run endpoints' shared error answers. Only the definition error differs
+ * between ad-hoc (400: you sent it) and saved (409: it has outlived a registry
+ * change), so the caller says which.
+ */
+function sendRunError(res: Response, error: unknown, definitionStatus: 400 | 409): boolean {
+  if (error instanceof ReportDefinitionError) {
+    res.status(definitionStatus).json({
+      success: false,
+      message: definitionStatus === 409 ? `This saved report can no longer run: ${error.message}` : error.message,
+    });
+    return true;
+  }
+  if (error instanceof ReportTimeout) {
+    // 504: the request was well-formed and the server gave up, which is a
+    // different thing from the caller having asked for something invalid.
+    res.status(504).json({ success: false, message: error.message });
+    return true;
+  }
+  if (error instanceof ReportsPoolUnavailable) {
+    // 503, never a masked 500: reports are switched off or the safety check has
+    // not passed, and nothing was run. The detail (which setting, which check)
+    // is for the server log, not the caller.
+    console.error(`reports unavailable: ${error.message}`);
+    res.status(503).json({
+      success: false,
+      message: 'Reports are not available right now. Nothing was run. Try again in a moment.',
+    });
+    return true;
+  }
+  return false;
+}
+
+/**
+ * POST /api/v1/reports/run — run a definition WITHOUT saving it.
+ *
+ * This is what the builder's preview pane calls. It needs no saved row and
+ * therefore no grant check: you are running a definition you just supplied,
+ * against your own workspace, on a connection that cannot see anyone else's
+ * data. The tenant comes from the token, as everywhere.
+ */
+export const runAdHoc = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const { definition } = req.body ?? {};
+    if (!definition) {
+      res.status(400).json({ success: false, message: 'definition is required' });
+      return;
+    }
+    const run = await runReport(definition, tenantId);
+    res.json({ success: true, ...run });
+  } catch (error) {
+    if (!sendRunError(res, error, 400)) next(error);
+  }
+};
+
+/**
+ * GET /api/v1/reports/:id/run — run a SAVED report.
+ *
+ * Requires view — the same predicate as GET /reports/:id, so a workspace admin
+ * may run an OWNERLESS report exactly as they may view it, and nothing more.
+ * The predicate is in the SELECT that fetches the definition, so a caller
+ * without access never obtains a definition to run.
+ */
+export const runSaved = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const userId = Number(req.user?.id);
+
+    const found = await pool.query(
+      `SELECT r.id, r.name, r.definition
+         FROM saved_reports r
+        WHERE r.tenant_id = $1 AND r.id = $3 AND ${canViewOrAdminPredicate('r', 2, 4)}`,
+      [tenantId, userId, req.params.id, isAdminCaller(req)],
+    );
+    if (!found.rows[0]) { res.status(404).json({ success: false, message: 'Report not found' }); return; }
+
+    const run = await runReport(found.rows[0].definition, tenantId);
+    res.json({
+      success: true,
+      report: { id: found.rows[0].id, name: found.rows[0].name },
+      ...run,
+    });
+  } catch (error) {
+    if (!sendRunError(res, error, 409)) next(error);
   }
 };

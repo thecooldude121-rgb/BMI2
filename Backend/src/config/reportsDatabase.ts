@@ -78,14 +78,33 @@ function getPool(): Pool {
 }
 
 /**
- * Behavioural proof that this connection is subject to RLS. Runs once per
- * process and is cached; a failure is fatal for reports and harmless for
- * everything else.
+ * Behavioural proof that this connection is subject to RLS.
+ *
+ * ONLY A PASS IS CACHED (reports replay step d). The first version cached the
+ * promise whatever it settled to, so one TEMPORARY failure — Postgres
+ * restarting, a dropped connection, the pool briefly exhausted — refused every
+ * report until the backend was restarted. Now a failed check is forgotten and
+ * the next report run checks again. Concurrent runs share one in-flight check.
+ *
+ * Nothing is served before a check has PASSED: every run awaits this first, and
+ * a failure (temporary or not) rejects the run before its query is sent. A
+ * definite failure — rows visible with no tenant set — simply fails again on
+ * each attempt.
  */
 export function assertRowSecurityActive(): Promise<void> {
   if (verified) return verified;
-  verified = (async () => {
-    const client = await getPool().connect();
+  const attempt = (async () => {
+    let client: PoolClient;
+    try {
+      client = await getPool().connect();
+    } catch (err) {
+      if (err instanceof ReportsPoolUnavailable) throw err;
+      throw new ReportsPoolUnavailable(
+        `The reports safety check could not connect, so no report was run; the next run checks again. `
+        + `(${(err as Error).message})`,
+      );
+    }
+    let broken = false;
     try {
       await client.query('BEGIN');
       // Deliberately do NOT set app.tenant_id. The policy compares tenant_id to
@@ -100,11 +119,23 @@ export function assertRowSecurityActive(): Promise<void> {
           + 'probably running as a table owner or a superuser, for whom policies are bypassed.',
         );
       }
+    } catch (err) {
+      if (err instanceof ReportsPoolUnavailable) throw err;
+      // A connection that failed mid-check is discarded, not returned to the
+      // pool with a transaction still open.
+      broken = true;
+      throw new ReportsPoolUnavailable(
+        `The reports safety check did not complete, so no report was run; the next run checks again. `
+        + `(${(err as Error).message})`,
+      );
     } finally {
-      client.release();
+      client.release(broken);
     }
   })();
-  return verified;
+  verified = attempt;
+  // Forget a failure, but only if no newer attempt has replaced this one.
+  attempt.catch(() => { if (verified === attempt) verified = null; });
+  return attempt;
 }
 
 export interface ScopedRun {

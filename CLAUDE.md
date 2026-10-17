@@ -1967,7 +1967,23 @@ old constraint, which fails the shared-name test.
       workspace's admin 404 with the row unchanged; a record surviving its report and people). Mutation-tested (8,
       all killed). 071: applied to the test DB; on live a rolled-back dry run only, pending Venkat's OK — the
       backend's check mode will refuse to start on main until it is applied.
-  - **d.** Run endpoints.
+  - **d.** Run endpoints. **BUILT 2026-10-17** (P3 Phase 3 as of `1fed4a6`, plus the items below). `POST /reports/run`
+    (ad-hoc, for the builder preview) and `GET /reports/:id/run` (saved; needs view). Every run carries a server-composed
+    `provenance` block: rows matched, seeded vs real (NULL, never 0, where a module has no `is_seed`), test rows excluded,
+    coverage per join, truncation DETECTED (asks for cap + 1). A timeout is a 504; a saved definition that no longer
+    compiles is a 409. Backend only, no UI.
+    - **The reports safety check is re-run after a failure — asked for by Venkat 2026-10-16.** `assertRowSecurityActive`
+      cached its promise whatever it settled to, so one temporary failure (Postgres restarting, a dropped connection)
+      refused every report until the backend restarted. Now only a PASS is cached; a failed check is forgotten and the
+      next run checks again; concurrent runs share one in-flight check; a client that failed mid-check is discarded.
+      **Nothing is served before a check passes** — the run's own query is never sent. A definite failure (rows visible
+      with no tenant) simply fails again each time.
+    - **Added beyond Phase 3:** an unavailable reports connection or failed check is a **503** ("Reports are not
+      available right now. Nothing was run.") with the detail only in the server log — it was a masked 500; running a
+      saved report uses the step c view predicate, so an admin may run an ownerless report exactly as they may view it;
+      a malformed report id on any `/reports/:id…` route is a 404 (it was a masked 500 from the uuid cast).
+    - Tests: `roundTrip.reportRun` (16: Phase 3's 14 + ownerless run + malformed id), `roundTrip.reportsSafetyRecheck`
+      (4), `roundTrip.reportsRls` (a definite failure is refused again). Mutation-tested (8, all killed).
   - **e.** Report Detail BY ID (replaces the interim stub above; the Reports page's View controls
     come back pointing at real ids).
   - **f.** The builder. **Once it is real, label it "Available"** — even though the Figma card
